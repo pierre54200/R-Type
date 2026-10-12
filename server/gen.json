@@ -7,8 +7,9 @@
       "suffix": "component",
       "classSuffix": "Component",
       "files": {
-        "hpp": "component.hpp.tpl",
-        "cpp": "component.cpp.tpl"
+        "hpp": "component/component.hpp.tpl",
+        "cpp": "component/component.cpp.tpl",
+        "test.cpp": "component/component.test.cpp.tpl"
       }
     },
     "service": {
@@ -16,8 +17,9 @@
       "suffix": "service",
       "classSuffix": "Service",
       "files": {
-        "hpp": "service.hpp.tpl",
-        "cpp": "service.cpp.tpl"
+        "hpp": "service/service.hpp.tpl",
+        "cpp": "service/service.cpp.tpl",
+        "test.cpp": "service/service.test.cpp.tpl"
       }
     },
     "class": {
@@ -25,8 +27,9 @@
       "suffix": "",
       "classSuffix": "",
       "files": {
-        "hpp": "class.hpp.tpl",
-        "cpp": "class.cpp.tpl"
+        "hpp": "class/class.hpp.tpl",
+        "cpp": "class/class.cpp.tpl",
+        "test.cpp": "class/class.test.cpp.tpl"
       }
     }
   }

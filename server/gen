@@ -3,9 +3,10 @@
 # Generateur de fichiers C++ facon Angular CLI.
 #
 # Usage :
-#   ./gen g c network/player-ship     -> app/src/network/player-ship.component.{hpp,cpp}
+#   ./gen g c network/player-ship     -> app/src/network/player-ship.component.{hpp,cpp,spec.cpp}
 #   ./gen generate service game/score
 #   ./gen g cl utils/vector2 --dry-run
+#   ./gen g c ui/menu --skip-tests    -> sans le fichier .spec.cpp
 #
 # La configuration (types, suffixes, templates) est dans gen.json.
 # Necessite jq (apt install jq / brew install jq).
@@ -18,16 +19,17 @@ CONFIG="$ROOT/gen.json"
 die() { echo "erreur : $*" >&2; exit 1; }
 
 usage() {
-    sed -n '3,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 1
 }
 
-# Arguments
 DRY_RUN=0
+SKIP_TESTS=0
 ARGS=()
 for a in "$@"; do
     case "$a" in
         --dry-run) DRY_RUN=1 ;;
+        --skip-tests) SKIP_TESTS=1 ;;
         --help|-h) usage ;;
         --*) die "option inconnue : $a" ;;
         *) ARGS+=("$a") ;;
@@ -42,7 +44,6 @@ PATH_ARG="${ARGS[2]}"
 command -v jq >/dev/null || die "jq n'est pas installe (apt install jq / brew install jq)"
 [ -f "$CONFIG" ] || die "gen.json introuvable a la racine du projet"
 
-# Recherche du type (nom complet ou alias)
 TYPE=$(jq -r --arg t "$TYPE_ARG" '
     .schematics | to_entries[]
     | select(.key == $t or .value.alias == $t) | .key' "$CONFIG" | head -n 1)
@@ -61,7 +62,6 @@ TPL_DIR="$ROOT/$(cfg '.templatesDir')"
 SUFFIX="$(cfg '.schematics[$t].suffix')"
 CLASS_SUFFIX="$(cfg '.schematics[$t].classSuffix')"
 
-# Chemin et nom
 PATH_ARG="${PATH_ARG#/}"
 PATH_ARG="${PATH_ARG%/}"
 [ -n "$PATH_ARG" ] || die "chemin vide"
@@ -71,7 +71,6 @@ REL_DIR="$(dirname "$PATH_ARG")"
 [ "$REL_DIR" = "." ] && REL_DIR=""
 RAW_NAME="$(basename "$PATH_ARG")"
 
-# "playerShip", "player_ship", "PlayerShip" -> "player-ship"
 NAME=$(printf '%s' "$RAW_NAME" \
     | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' \
     | tr '_ ' '--' | tr '[:upper:]' '[:lower:]' \
@@ -79,7 +78,6 @@ NAME=$(printf '%s' "$RAW_NAME" \
 
 [[ "$NAME" =~ ^[a-z][a-z0-9-]*$ ]] || die "nom invalide : '$RAW_NAME' (lettres, chiffres, - ou _, et commencer par une lettre)"
 
-# "player-ship" -> "PlayerShip"
 CLASS_NAME=""
 IFS='-' read -ra PARTS <<< "$NAME"
 for p in "${PARTS[@]}"; do CLASS_NAME+="${p^}"; done
@@ -106,8 +104,9 @@ render() {
     printf '%s\n' "$c"
 }
 
-# Verifications avant de creer quoi que ce soit
-mapfile -t EXTS < <(jq -r --arg t "$TYPE" '.schematics[$t].files | keys_unsorted[]' "$CONFIG")
+mapfile -t EXTS < <(jq -r --arg t "$TYPE" --argjson skip "$SKIP_TESTS" '
+    .schematics[$t].files | keys_unsorted[]
+    | select($skip == 0 or (startswith("spec") | not))' "$CONFIG")
 [ "${#EXTS[@]}" -gt 0 ] || die "aucun fichier defini pour le type '$TYPE' dans gen.json"
 
 for ext in "${EXTS[@]}"; do
@@ -118,7 +117,6 @@ for ext in "${EXTS[@]}"; do
     render "$tpl" > /dev/null
 done
 
-# Creation
 for ext in "${EXTS[@]}"; do
     tpl="$TPL_DIR/$(jq -r --arg t "$TYPE" --arg e "$ext" '.schematics[$t].files[$e]' "$CONFIG")"
     target="$OUT_DIR/$FILE_STEM.$ext"

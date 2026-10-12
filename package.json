@@ -1,0 +1,20 @@
+{
+  "name": "r-type",
+  "version": "0.1.0",
+  "private": true,
+  "description": "R-Type : serveur TCP C++ avec recompilation automatique dans Docker",
+  "scripts": {
+    "start": "docker compose up --build",
+    "start:bg": "docker compose up --build -d",
+    "stop": "docker compose down",
+    "restart": "docker compose restart",
+    "recreate": "docker compose up -d --force-recreate",
+    "logs": "docker compose logs -f",
+    "shell": "docker compose exec server bash",
+    "test": "docker compose exec server /build/tests",
+    "coverage": "docker compose exec server bash /app/coverage.sh",
+    "clean": "docker compose down -v --rmi local",
+    "gen": "./server/gen",
+    "g": "./server/gen g"
+  }
+}
