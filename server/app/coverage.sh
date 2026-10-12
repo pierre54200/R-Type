@@ -1,10 +1,7 @@
-#!/usr/bin/env bash
-# Mesure la couverture de code des tests et l'affiche dans le terminal.
-# Usage (depuis la racine du projet) : npm run coverage
 set -euo pipefail
 
 SRC_DIR=/app
-BUILD_DIR=/build/coverage     # build separe, n'affecte pas le serveur en cours
+BUILD_DIR=/build/coverage
 
 echo "[coverage] compilation avec instrumentation..."
 cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCOVERAGE=ON > /dev/null
@@ -15,7 +12,6 @@ if [ ! -x "$BUILD_DIR/tests" ]; then
     exit 1
 fi
 
-# Supprime les mesures du lancement precedent
 find "$BUILD_DIR" -name '*.gcda' -delete
 
 echo "[coverage] lancement des tests..."
