@@ -1,0 +1,33 @@
+{
+  "sourceRoot": "app/src",
+  "templatesDir": "templates",
+  "schematics": {
+    "component": {
+      "alias": "c",
+      "suffix": "component",
+      "classSuffix": "Component",
+      "files": {
+        "hpp": "component.hpp.tpl",
+        "cpp": "component.cpp.tpl"
+      }
+    },
+    "service": {
+      "alias": "s",
+      "suffix": "service",
+      "classSuffix": "Service",
+      "files": {
+        "hpp": "service.hpp.tpl",
+        "cpp": "service.cpp.tpl"
+      }
+    },
+    "class": {
+      "alias": "cl",
+      "suffix": "",
+      "classSuffix": "",
+      "files": {
+        "hpp": "class.hpp.tpl",
+        "cpp": "class.cpp.tpl"
+      }
+    }
+  }
+}

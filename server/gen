@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# Generateur de fichiers C++ facon Angular CLI.
+#
+# Usage :
+#   ./gen g c network/player-ship     -> app/src/network/player-ship.component.{hpp,cpp}
+#   ./gen generate service game/score
+#   ./gen g cl utils/vector2 --dry-run
+#
+# La configuration (types, suffixes, templates) est dans gen.json.
+# Necessite jq (apt install jq / brew install jq).
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG="$ROOT/gen.json"
+
+die() { echo "erreur : $*" >&2; exit 1; }
+
+usage() {
+    sed -n '3,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    exit 1
+}
+
+# Arguments
+DRY_RUN=0
+ARGS=()
+for a in "$@"; do
+    case "$a" in
+        --dry-run) DRY_RUN=1 ;;
+        --help|-h) usage ;;
+        --*) die "option inconnue : $a" ;;
+        *) ARGS+=("$a") ;;
+    esac
+done
+
+[ "${#ARGS[@]}" -eq 3 ] || usage
+case "${ARGS[0]}" in g|generate) ;; *) usage ;; esac
+TYPE_ARG="${ARGS[1]}"
+PATH_ARG="${ARGS[2]}"
+
+command -v jq >/dev/null || die "jq n'est pas installe (apt install jq / brew install jq)"
+[ -f "$CONFIG" ] || die "gen.json introuvable a la racine du projet"
+
+# Recherche du type (nom complet ou alias)
+TYPE=$(jq -r --arg t "$TYPE_ARG" '
+    .schematics | to_entries[]
+    | select(.key == $t or .value.alias == $t) | .key' "$CONFIG" | head -n 1)
+
+if [ -z "$TYPE" ]; then
+    available=$(jq -r '.schematics | to_entries
+        | map(if .value.alias then "\(.key) (\(.value.alias))" else .key end)
+        | join(", ")' "$CONFIG")
+    die "type inconnu '$TYPE_ARG'. Types disponibles : $available"
+fi
+
+cfg() { jq -r --arg t "$TYPE" "$1 // empty" "$CONFIG"; }
+
+SRC_ROOT="$ROOT/$(cfg '.sourceRoot')"
+TPL_DIR="$ROOT/$(cfg '.templatesDir')"
+SUFFIX="$(cfg '.schematics[$t].suffix')"
+CLASS_SUFFIX="$(cfg '.schematics[$t].classSuffix')"
+
+# Chemin et nom
+PATH_ARG="${PATH_ARG#/}"
+PATH_ARG="${PATH_ARG%/}"
+[ -n "$PATH_ARG" ] || die "chemin vide"
+case "/$PATH_ARG/" in */../*) die "chemin invalide : '$PATH_ARG'" ;; esac
+
+REL_DIR="$(dirname "$PATH_ARG")"
+[ "$REL_DIR" = "." ] && REL_DIR=""
+RAW_NAME="$(basename "$PATH_ARG")"
+
+# "playerShip", "player_ship", "PlayerShip" -> "player-ship"
+NAME=$(printf '%s' "$RAW_NAME" \
+    | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' \
+    | tr '_ ' '--' | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/-+/-/g; s/^-|-$//g')
+
+[[ "$NAME" =~ ^[a-z][a-z0-9-]*$ ]] || die "nom invalide : '$RAW_NAME' (lettres, chiffres, - ou _, et commencer par une lettre)"
+
+# "player-ship" -> "PlayerShip"
+CLASS_NAME=""
+IFS='-' read -ra PARTS <<< "$NAME"
+for p in "${PARTS[@]}"; do CLASS_NAME+="${p^}"; done
+CLASS_NAME+="$CLASS_SUFFIX"
+
+FILE_STEM="$NAME${SUFFIX:+.$SUFFIX}"
+OUT_DIR="$SRC_ROOT${REL_DIR:+/$REL_DIR}"
+INCLUDE_PATH="${REL_DIR:+$REL_DIR/}$FILE_STEM.hpp"
+GUARD="$(printf '%s' "$INCLUDE_PATH" | tr -c '[:alnum:]' '_' | tr '[:lower:]' '[:upper:]')_"
+
+render() {
+    local c
+    c="$(cat "$1")"
+    c="${c//\{\{ClassName\}\}/$CLASS_NAME}"
+    c="${c//\{\{fileName\}\}/$FILE_STEM}"
+    c="${c//\{\{name\}\}/$NAME}"
+    c="${c//\{\{header\}\}/$FILE_STEM.hpp}"
+    c="${c//\{\{includePath\}\}/$INCLUDE_PATH}"
+    c="${c//\{\{guard\}\}/$GUARD}"
+    c="${c//\{\{type\}\}/$TYPE}"
+    local left
+    left=$(grep -o '{{[^}]*}}' <<< "$c" | head -n 1 || true)
+    [ -z "$left" ] || die "variable de template inconnue dans $(basename "$1") : $left"
+    printf '%s\n' "$c"
+}
+
+# Verifications avant de creer quoi que ce soit
+mapfile -t EXTS < <(jq -r --arg t "$TYPE" '.schematics[$t].files | keys_unsorted[]' "$CONFIG")
+[ "${#EXTS[@]}" -gt 0 ] || die "aucun fichier defini pour le type '$TYPE' dans gen.json"
+
+for ext in "${EXTS[@]}"; do
+    tpl="$TPL_DIR/$(jq -r --arg t "$TYPE" --arg e "$ext" '.schematics[$t].files[$e]' "$CONFIG")"
+    [ -f "$tpl" ] || die "template introuvable : ${tpl#"$ROOT"/}"
+    target="$OUT_DIR/$FILE_STEM.$ext"
+    [ ! -e "$target" ] || die "${target#"$ROOT"/} existe deja, rien n'a ete cree"
+    render "$tpl" > /dev/null
+done
+
+# Creation
+for ext in "${EXTS[@]}"; do
+    tpl="$TPL_DIR/$(jq -r --arg t "$TYPE" --arg e "$ext" '.schematics[$t].files[$e]' "$CONFIG")"
+    target="$OUT_DIR/$FILE_STEM.$ext"
+    rel="${target#"$ROOT"/}"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "CREATE $rel (dry-run)"
+    else
+        mkdir -p "$OUT_DIR"
+        render "$tpl" > "$target"
+        echo "CREATE $rel ($(wc -c < "$target" | tr -d ' ') bytes)"
+    fi
+done
