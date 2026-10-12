@@ -10,26 +10,56 @@ endif()
 
 find_package(Threads REQUIRED)
 
-# Toutes les sources et tous les headers de src/**, a n'importe quelle profondeur.
+# Couverture de code : active seulement par coverage.sh (-DCOVERAGE=ON)
+option(COVERAGE "Compiler avec la mesure de couverture (gcov)" OFF)
+if(COVERAGE)
+    add_compile_options(--coverage -O0 -fno-inline)
+    add_link_options(--coverage)
+endif()
+
+set(SRC ${CMAKE_SOURCE_DIR}/src)
+set(MAIN_SOURCE ${SRC}/main.cpp)
+
+# Toutes les sources de src/**, a n'importe quelle profondeur.
 # CONFIGURE_DEPENDS : un fichier ajoute ou supprime est detecte au prochain build.
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/*.cpp
-    ${CMAKE_SOURCE_DIR}/src/*.cc
-    ${CMAKE_SOURCE_DIR}/src/*.cxx
-)
+file(GLOB_RECURSE ALL_SOURCES CONFIGURE_DEPENDS ${SRC}/*.cpp ${SRC}/*.cc ${SRC}/*.cxx)
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/*.hpp
-    ${CMAKE_SOURCE_DIR}/src/*.h
-    ${CMAKE_SOURCE_DIR}/src/*.hh
-    ${CMAKE_SOURCE_DIR}/src/*.tpp
-    ${CMAKE_SOURCE_DIR}/src/*.ipp
-)
+    ${SRC}/*.hpp ${SRC}/*.h ${SRC}/*.hh ${SRC}/*.tpp ${SRC}/*.ipp)
 
-add_executable(server ${SOURCES} ${HEADERS})
+# Les tests (*.spec.cpp ou *.test.cpp) sont a part
+set(TEST_SOURCES ${ALL_SOURCES})
+list(FILTER TEST_SOURCES INCLUDE REGEX "\\.(spec|test)\\.(cpp|cc|cxx)$")
+list(FILTER ALL_SOURCES EXCLUDE REGEX "\\.(spec|test)\\.(cpp|cc|cxx)$")
 
-# src/ est la racine des includes : depuis n'importe quel fichier,
-# on ecrit #include "net/Socket.hpp" pour src/net/Socket.hpp
-target_include_directories(server PRIVATE ${CMAKE_SOURCE_DIR}/src)
+# "core" = tout le code sauf main.cpp, partage entre le serveur et les tests
+set(CORE_SOURCES ${ALL_SOURCES})
+list(REMOVE_ITEM CORE_SOURCES ${MAIN_SOURCE})
 
-target_compile_options(server PRIVATE -Wall -Wextra)
-target_link_libraries(server PRIVATE Threads::Threads)
+if(CORE_SOURCES)
+    add_library(core OBJECT ${CORE_SOURCES} ${HEADERS})
+    set(CORE_SCOPE PUBLIC)
+else()
+    # Projet qui ne contient encore que main.cpp : core est vide
+    add_library(core INTERFACE)
+    set(CORE_SCOPE INTERFACE)
+endif()
+# src/ est la racine des includes : #include "net/Socket.hpp" pour src/net/Socket.hpp
+target_include_directories(core ${CORE_SCOPE} ${SRC})
+target_compile_options(core ${CORE_SCOPE} -Wall -Wextra)
+target_link_libraries(core ${CORE_SCOPE} Threads::Threads)
+
+# Le serveur
+add_executable(server ${MAIN_SOURCE})
+target_link_libraries(server PRIVATE core)
+
+# Les tests (GoogleTest), seulement s'il y a des fichiers .spec.cpp ou .test.cpp
+find_package(GTest QUIET)
+if(TEST_SOURCES AND GTest_FOUND)
+    enable_testing()
+    add_executable(tests ${TEST_SOURCES})
+    target_link_libraries(tests PRIVATE core GTest::gtest GTest::gtest_main)
+    include(GoogleTest)
+    gtest_discover_tests(tests)
+elseif(TEST_SOURCES)
+    message(WARNING "Des fichiers de test existent mais GoogleTest est introuvable")
+endif()

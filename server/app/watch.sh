@@ -1,8 +1,12 @@
+#!/usr/bin/env bash
+# Surveille le projet, recompile avec CMake (incremental), lance les tests et relance le serveur.
 set -u
 
-SRC_DIR=/app
-BUILD_DIR=/build
+SRC_DIR=/app          # contient CMakeLists.txt et src/
+BUILD_DIR=/build      # hors des sources, conserve via un volume Docker
 BIN="$BUILD_DIR/server"
+TESTS_BIN="$BUILD_DIR/tests"
+RUN_TESTS="${RUN_TESTS:-1}"   # mettre RUN_TESTS=0 dans le .env pour desactiver
 PID=""
 
 configure() {
@@ -12,7 +16,23 @@ configure() {
 
 build() {
     echo "[watch] compilation..."
+    # Ninja ne recompile que les fichiers modifies ;
+    # si CMakeLists.txt a change, CMake se reconfigure tout seul.
     cmake --build "$BUILD_DIR" -j"$(nproc)"
+}
+
+run_tests() {
+    [ "$RUN_TESTS" = "1" ] || return 0
+    if [ ! -x "$TESTS_BIN" ] || ! find "$SRC_DIR/src" -name '*.spec.c*' | grep -q .; then
+        echo "[watch] aucun test"
+        return 0
+    fi
+    echo "[watch] tests..."
+    if GTEST_COLOR=yes "$TESTS_BIN" --gtest_brief=1; then
+        echo "[watch] tests OK"
+    else
+        echo "[watch] TESTS EN ECHEC (le serveur est relance quand meme)"
+    fi
 }
 
 stop() {
@@ -35,17 +55,25 @@ if [ ! -f "$BUILD_DIR/build.ninja" ]; then
     configure || echo "[watch] echec de la configuration CMake"
 fi
 
-if build; then start; else echo "[watch] echec de la compilation initiale, en attente de corrections..."; fi
+if build; then
+    run_tests
+    start
+else
+    echo "[watch] echec de la compilation initiale, en attente de corrections..."
+fi
 
 while true; do
+    # Lance en arriere-plan + wait pour que docker stop soit pris en compte immediatement
     inotifywait -q -r -e close_write,create,delete,move \
-        --include '(\.(cpp|cc|cxx|hpp|h|hh|tpp|ipp)|CMakeLists\.txt|\.cmake)$' "$SRC_DIR" &
+        --include '(\.(cpp|cc|cxx|hpp|h|hh|tpp|ipp)|CMakeLists\.txt|\.cmake)$' "$SRC_DIR" >/dev/null &
     wait $!
-    sleep 0.2
+    sleep 0.2  # laisse l'editeur finir d'ecrire
 
+    # Si la config a ete cassee ou n'existe pas encore, on la refait
     [ -f "$BUILD_DIR/build.ninja" ] || configure
 
     if build; then
+        run_tests
         stop
         start
     else
