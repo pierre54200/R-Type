@@ -1,5 +1,5 @@
 {
-  "sourceRoot": "app/src",
+  "sourceRoot": "server/src",
   "templatesDir": "templates",
   "schematics": {
     "component": {

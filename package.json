@@ -1,15 +1,15 @@
 {
-  "name": "app",
+  "name": "r-type",
   "version": "0.1.0",
   "private": true,
-  "description": "app",
+  "description": "R-Type",
   "scripts": {
-    "start": "./app/scripts/watch.sh",
-    "start:notests": "RUN_TESTS=0 ./app/scripts/watch.sh",
-    "build": "cmake -S app -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build",
+    "start": "./server/scripts/watch.sh",
+    "start:notests": "RUN_TESTS=0 ./server/scripts/watch.sh",
+    "build": "cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build",
     "test": "./build/tests",
-    "coverage": "./app/scripts/coverage.sh",
+    "coverage": "./server/scripts/coverage.sh",
     "clean": "rm -rf build build-coverage",
-    "g": "./app/scripts/cppf.sh g"
+    "g": "./server/scripts/cppf.sh g"
   }
 }

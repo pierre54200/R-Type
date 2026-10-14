@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SRC_DIR="$ROOT/app"
+SRC_DIR="$ROOT/server"
 BUILD_DIR="$ROOT/build-coverage"
 
 command -v gcovr >/dev/null || { echo "[coverage] gcovr n'est pas installe" >&2; exit 1; }
@@ -14,7 +14,7 @@ command -v ninja >/dev/null && GENERATOR=(-G Ninja)
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 echo "[coverage] compilation avec instrumentation..."
-cmake -S "$SRC_DIR" -B "$BUILD_DIR" "${GENERATOR[@]}" -DCMAKE_BUILD_TYPE=Debug -DCOVERAGE=ON > /dev/null
+cmake -S "$ROOT" -B "$BUILD_DIR" "${GENERATOR[@]}" -DCMAKE_BUILD_TYPE=Debug -DCOVERAGE=ON > /dev/null
 cmake --build "$BUILD_DIR" -j"$JOBS"
 
 if [ ! -x "$BUILD_DIR/tests" ]; then
@@ -29,7 +29,7 @@ echo "[coverage] lancement des tests..."
 
 echo
 gcovr \
-    --root "$SRC_DIR" \
+    --root "$ROOT" \
     --filter "$SRC_DIR/src/" \
     --exclude '.*\.(spec|test)\.(cpp|cc|cxx)$' \
     --exclude "$SRC_DIR/src/main.cpp" \

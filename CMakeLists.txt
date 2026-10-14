@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(tcp_server LANGUAGES CXX)
+project(R-Type LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,7 +17,7 @@ if(COVERAGE)
     add_link_options(--coverage)
 endif()
 
-set(SRC ${CMAKE_SOURCE_DIR}/src)
+set(SRC ${CMAKE_SOURCE_DIR}/server/src)
 set(MAIN_SOURCE ${SRC}/main.cpp)
 
 file(GLOB_RECURSE ALL_SOURCES CONFIGURE_DEPENDS ${SRC}/*.cpp ${SRC}/*.cc ${SRC}/*.cxx)
@@ -45,8 +45,8 @@ target_compile_options(core ${CORE_SCOPE} -Wall -Wextra)
 target_link_libraries(core ${CORE_SCOPE} Threads::Threads)
 
 # Executable
-add_executable(server ${MAIN_SOURCE})
-target_link_libraries(server PRIVATE core)
+add_executable(r-type_server ${MAIN_SOURCE})
+target_link_libraries(r-type_server PRIVATE core)
 
 find_package(GTest QUIET)
 if(TEST_SOURCES AND GTest_FOUND)

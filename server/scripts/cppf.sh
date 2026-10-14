@@ -2,7 +2,7 @@
 # Generateur de fichiers C++ facon Angular CLI.
 #
 # Usage :
-#   npm run g c Test/test       -> app/src/Test/test.component.{hpp,cpp,test.cpp}
+#   npm run g c Test/test       -> server/src/Test/test.component.{hpp,cpp,test.cpp}
 #   npm run g s game/score
 #   npm run g cl utils/vector2 --dry-run
 #   npm run g c ui/menu --skip-tests  -> sans le fichier de test
@@ -46,7 +46,7 @@ TYPE_ARG="${ARGS[1]}"
 PATH_ARG="${ARGS[2]}"
 
 command -v jq >/dev/null || die "jq n'est pas installe (apt install jq / brew install jq)"
-[ -f "$CONFIG" ] || die "cppf.json introuvable dans app/scripts"
+[ -f "$CONFIG" ] || die "cppf.json introuvable dans server/scripts"
 
 TYPE=$(jq -r --arg t "$TYPE_ARG" '
     .schematics | to_entries[]

@@ -14,9 +14,9 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SRC_DIR="$ROOT/app"
+SRC_DIR="$ROOT/server"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
-BIN="$BUILD_DIR/server"
+BIN="$BUILD_DIR/r-type_server"
 TESTS_BIN="$BUILD_DIR/tests"
 RUN_TESTS="${RUN_TESTS:-1}"
 WATCH_REGEX='(\.(cpp|cc|cxx|hpp|h|hh|tpp|ipp)|CMakeLists\.txt|\.cmake)$'
@@ -31,7 +31,7 @@ log() { printf '[watch] %s\n' "$*"; }
 die() { printf '[watch] erreur : %s\n' "$*" >&2; exit 1; }
 
 command -v cmake >/dev/null || die "cmake n'est pas installe"
-[ -f "$SRC_DIR/CMakeLists.txt" ] || die "app/CMakeLists.txt introuvable"
+[ -f "$ROOT/CMakeLists.txt" ] || die "CMakeLists.txt introuvable a la racine"
 
 # Variables d'environnement du projet (SERVER_PORT...)
 if [ -f "$ROOT/.env" ]; then
@@ -58,7 +58,7 @@ fi
 
 configure() {
     log "configuration CMake..."
-    cmake -S "$SRC_DIR" -B "$BUILD_DIR" "${GENERATOR[@]}" -DCMAKE_BUILD_TYPE=Debug
+    cmake -S "$ROOT" -B "$BUILD_DIR" "${GENERATOR[@]}" -DCMAKE_BUILD_TYPE=Debug
 }
 
 build() {
@@ -108,7 +108,7 @@ stop_server() {
 # ---------- surveillance ----------
 
 snapshot() {
-    find "$SRC_DIR" -type f "${FIND_FILTER[@]}" -print 2>/dev/null | sort
+    find "$SRC_DIR" "$ROOT/CMakeLists.txt" -type f "${FIND_FILTER[@]}" -print 2>/dev/null | sort
 }
 
 wait_poll() {
@@ -118,7 +118,7 @@ wait_poll() {
     while :; do
         sleep 1
         [ "$(snapshot)" != "$before" ] && return 0
-        [ -n "$(find "$SRC_DIR" -type f "${FIND_FILTER[@]}" -newer "$marker" -print -quit 2>/dev/null)" ] && return 0
+        [ -n "$(find "$SRC_DIR" "$ROOT/CMakeLists.txt" -type f "${FIND_FILTER[@]}" -newer "$marker" -print -quit 2>/dev/null)" ] && return 0
     done
 }
 
@@ -126,10 +126,10 @@ wait_change() {
     case "$WATCHER" in
         inotify)
             inotifywait -q -r -e close_write,create,delete,move \
-                --include "$WATCH_REGEX" "$SRC_DIR" >/dev/null 2>&1 &
+                --include "$WATCH_REGEX" "$SRC_DIR" "$ROOT/CMakeLists.txt" >/dev/null 2>&1 &
             ;;
         fswatch)
-            fswatch -1 -r -E -e '.*' -i "$WATCH_REGEX" "$SRC_DIR" >/dev/null 2>&1 &
+            fswatch -1 -r -E -e '.*' -i "$WATCH_REGEX" "$SRC_DIR" "$ROOT/CMakeLists.txt" >/dev/null 2>&1 &
             ;;
         poll)
             wait_poll &
