@@ -1,20 +1,20 @@
-#!/usr/bin/env bash
 #
 # Generateur de fichiers C++ facon Angular CLI.
 #
 # Usage :
-#   ./gen g c network/player-ship     -> app/src/network/player-ship.component.{hpp,cpp,spec.cpp}
-#   ./gen generate service game/score
-#   ./gen g cl utils/vector2 --dry-run
-#   ./gen g c ui/menu --skip-tests    -> sans le fichier .spec.cpp
+#   npm run g c Test/test       -> app/src/Test/test.component.{hpp,cpp,test.cpp}
+#   npm run g s game/score
+#   npm run g cl utils/vector2 --dry-run
+#   npm run g c ui/menu --skip-tests  -> sans le fichier de test
 #
-# La configuration (types, suffixes, templates) est dans gen.json.
+# La configuration (types, suffixes, templates) est dans app/scripts/cppf.json.
 # Necessite jq (apt install jq / brew install jq).
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG="$ROOT/gen.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CONFIG="$SCRIPT_DIR/cppf.json"
 
 die() { echo "erreur : $*" >&2; exit 1; }
 
@@ -36,13 +36,17 @@ for a in "$@"; do
     esac
 done
 
+# Options passees via npm sans "--" (npm run g c test --skip-tests)
+[ "${npm_config_skip_tests:-}" = "true" ] && SKIP_TESTS=1
+[ "${npm_config_dry_run:-}" = "true" ] && DRY_RUN=1
+
 [ "${#ARGS[@]}" -eq 3 ] || usage
 case "${ARGS[0]}" in g|generate) ;; *) usage ;; esac
 TYPE_ARG="${ARGS[1]}"
 PATH_ARG="${ARGS[2]}"
 
 command -v jq >/dev/null || die "jq n'est pas installe (apt install jq / brew install jq)"
-[ -f "$CONFIG" ] || die "gen.json introuvable a la racine du projet"
+[ -f "$CONFIG" ] || die "cppf.json introuvable dans app/scripts"
 
 TYPE=$(jq -r --arg t "$TYPE_ARG" '
     .schematics | to_entries[]
@@ -58,7 +62,7 @@ fi
 cfg() { jq -r --arg t "$TYPE" "$1 // empty" "$CONFIG"; }
 
 SRC_ROOT="$ROOT/$(cfg '.sourceRoot')"
-TPL_DIR="$ROOT/$(cfg '.templatesDir')"
+TPL_DIR="$SCRIPT_DIR/$(cfg '.templatesDir')"
 SUFFIX="$(cfg '.schematics[$t].suffix')"
 CLASS_SUFFIX="$(cfg '.schematics[$t].classSuffix')"
 
@@ -88,6 +92,11 @@ OUT_DIR="$SRC_ROOT${REL_DIR:+/$REL_DIR}"
 INCLUDE_PATH="${REL_DIR:+$REL_DIR/}$FILE_STEM.hpp"
 GUARD="$(printf '%s' "$INCLUDE_PATH" | tr -c '[:alnum:]' '_' | tr '[:lower:]' '[:upper:]')_"
 
+# Tous les fichiers gardent le suffixe du type : test.component.hpp, test.component.test.cpp
+target_for() {
+    printf '%s/%s.%s' "$OUT_DIR" "$FILE_STEM" "$1"
+}
+
 render() {
     local c
     c="$(cat "$1")"
@@ -106,20 +115,20 @@ render() {
 
 mapfile -t EXTS < <(jq -r --arg t "$TYPE" --argjson skip "$SKIP_TESTS" '
     .schematics[$t].files | keys_unsorted[]
-    | select($skip == 0 or (startswith("spec") | not))' "$CONFIG")
-[ "${#EXTS[@]}" -gt 0 ] || die "aucun fichier defini pour le type '$TYPE' dans gen.json"
+    | select($skip == 0 or ((startswith("spec") or startswith("test")) | not))' "$CONFIG")
+[ "${#EXTS[@]}" -gt 0 ] || die "aucun fichier defini pour le type '$TYPE' dans cppf.json"
 
 for ext in "${EXTS[@]}"; do
     tpl="$TPL_DIR/$(jq -r --arg t "$TYPE" --arg e "$ext" '.schematics[$t].files[$e]' "$CONFIG")"
     [ -f "$tpl" ] || die "template introuvable : ${tpl#"$ROOT"/}"
-    target="$OUT_DIR/$FILE_STEM.$ext"
+    target="$(target_for "$ext")"
     [ ! -e "$target" ] || die "${target#"$ROOT"/} existe deja, rien n'a ete cree"
     render "$tpl" > /dev/null
 done
 
 for ext in "${EXTS[@]}"; do
     tpl="$TPL_DIR/$(jq -r --arg t "$TYPE" --arg e "$ext" '.schematics[$t].files[$e]' "$CONFIG")"
-    target="$OUT_DIR/$FILE_STEM.$ext"
+    target="$(target_for "$ext")"
     rel="${target#"$ROOT"/}"
     if [ "$DRY_RUN" -eq 1 ]; then
         echo "CREATE $rel (dry-run)"
