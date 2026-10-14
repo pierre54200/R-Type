@@ -12,7 +12,7 @@ file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
 )
 
 add_executable(r-type-server ${SERVER_SOURCES})
-target_include_directories(r-type-server PRIVATE server/src)
+target_include_directories(r-type-server PRIVATE server/src common)
 target_compile_options(r-type-server PRIVATE -Wall -Wextra)
 
 # Client
@@ -22,7 +22,7 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
 )
 
 add_executable(r-type-client ${CLIENT_SOURCES})
-target_include_directories(r-type-client PRIVATE client/src)
+target_include_directories(r-type-client PRIVATE client/src common)
 target_compile_options(r-type-client PRIVATE -Wall -Wextra)
 
 # Les deux exécutables à la racine du projet
