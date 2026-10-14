@@ -1,8 +1,6 @@
 #include <iostream>
-#include <cstdlib>
 
 
-int main(void) {
-    const char* portEnv = std::getenv("SERVER_PORT");
-    std::cout << "port: " << portEnv << std::endl;
+int main(int, const char *const *av) {
+    std::cout << "port: " << std::endl;
 }

@@ -1,32 +1,10 @@
-# Environnement local
-.env
 .vscode/
 
 # Dossiers de build
 build/
-build-coverage/
 
-# Build dans les sources (cmake -S .)
-CMakeCache.txt
-CMakeFiles/
-CMakeScripts/
-Makefile
-cmake_install.cmake
-CTestTestfile.cmake
-DartConfiguration.tcl
-Testing/
-_deps/
-build.ninja
-.ninja_*
-compile_commands.json
-*_include.cmake
-*_tests.cmake
 
-# Binaires
-/r-type_server
-/tests
-/r-type_client
-*.exe
-
+# Executable
+r-type*
 
 *.edit
