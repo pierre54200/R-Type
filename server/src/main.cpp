@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 
-#include "Server.hpp"
+#include "Server/Server.hpp"
 
 int main(int ac, const char *const *av) {
     try {

@@ -54,10 +54,31 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
     switch (packet.type) {
     case PacketType::Connect:
         if (!client) {
-            _clients.push_back({from, packet.data});
-            std::cout << packet.data << " s'est connecte (" << _clients.size()
+            _clients.push_back({from, packet.data, _nextId++, 100, 100});
+            Client& added = _clients.back();
+            std::cout << added.name << " s'est connecte (" << _clients.size()
                       << " joueur(s))" << std::endl;
+            for (const Client& other : _clients) {
+                send(makePosition({other.id, other.x, other.y, other.name}), added.address);
+                if (&other != &added)
+                    send(makePosition({added.id, added.x, added.y, added.name}), other.address);
+            }
         }
+        break;
+
+    case PacketType::Action: {
+        // Z, Q, S, D pour changer de direction
+        Action action;
+        if (!client || !readAction(packet, action)) {
+            return;
+        }
+        move(*client, action);
+        broadcast(makePosition({client->id, client->x, client->y, client->name}));
+        break;
+    }
+
+    case PacketType::Position:
+        // Pas d'envoi de position par les joueurs
         break;
 
     case PacketType::Message:
@@ -83,6 +104,38 @@ void Server::send(const Packet& packet, const sockaddr_in& to) {
     std::vector<uint8_t> buffer = encode(packet);
     sendto(_socket, buffer.data(), buffer.size(), 0,
            reinterpret_cast<const sockaddr*>(&to), sizeof(to));
+}
+
+void Server::broadcast(const Packet& packet) {
+    for (const Client& client : _clients)
+        send(packet, client.address);
+}
+
+void Server::move(Client& client, Action action) {
+    switch (action) {
+    case Action::Up:
+        client.y = client.y >= STEP ? client.y - STEP : 0;
+        std::cout << client.name << " -> (" << client.x << ", " << client.y << ")" << std::endl;
+        break;
+    case Action::Down:
+        client.y = client.y + STEP <= MAP_HEIGHT ? client.y + STEP : MAP_HEIGHT;
+        std::cout << client.name << " " << " -> (" << client.x << ", " << client.y << ")" << std::endl;
+        break;
+    case Action::Left:
+        client.x = client.x >= STEP ? client.x - STEP : 0;
+        std::cout << client.name << " -> (" << client.x << ", " << client.y << ")" << std::endl;
+        break;
+    case Action::Right:
+        client.x = client.x + STEP <= MAP_WIDTH ? client.x + STEP : MAP_WIDTH;
+        std::cout << client.name << " -> (" << client.x << ", " << client.y << ")" << std::endl;
+        break;
+    case Action::A:
+        std::cout << client.name << " press A." << std::endl;
+        break;
+    case Action::B:
+        std::cout << client.name << " press B." << std::endl;
+        break;
+    }
 }
 
 Server::Client* Server::find(const sockaddr_in& address) {

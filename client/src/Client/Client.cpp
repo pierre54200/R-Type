@@ -1,4 +1,5 @@
 #include "Client.hpp"
+#include "Protocol.hpp"
 
 #include <arpa/inet.h>
 #include <iostream>
@@ -21,7 +22,8 @@ Client::Client(const std::string& ip, int port, const std::string& name) {
 
     send({PacketType::Connect, name});
     std::cout << "Connecte a " << ip << ":" << port
-              << " (tape un message puis Entree, Ctrl+D pour quitter)" << std::endl;
+              << " (z/q/s/d + Entree pour bouger, sinon message, Ctrl+D pour quitter)"
+              << std::endl;
 }
 
 Client::~Client() {
@@ -57,7 +59,19 @@ bool Client::readKeyboard() {
     while ((end = _input.find('\n')) != std::string::npos) {
         std::string line = _input.substr(0, end);
         _input.erase(0, end + 1);
-        if (!line.empty())
+        if (line == "z")
+            send(makeAction(Action::Up));
+        else if (line == "s")
+            send(makeAction(Action::Down));
+        else if (line == "q")
+            send(makeAction(Action::Left));
+        else if (line == "d")
+            send(makeAction(Action::Right));
+        else if (line == "a")
+            send(makeAction((Action::A)));
+        else if (line == "e")
+            send(makeAction((Action::B)));
+        else if (!line.empty())
             send({PacketType::Message, line});
     }
     return true;
@@ -70,9 +84,15 @@ void Client::readSocket() {
         return;
 
     Packet packet;
-    if (decode(buffer, static_cast<std::size_t>(received), packet) &&
-        packet.type == PacketType::Message)
+    if (!decode(buffer, static_cast<std::size_t>(received), packet))
+        return;
+
+    PlayerPosition pos;
+    if (packet.type == PacketType::Message)
         std::cout << packet.data << std::endl;
+    else if (packet.type == PacketType::Position && readPosition(packet, pos))
+        std::cout << pos.name << " (#" << +pos.id << ") est en (" << pos.x << ", " << pos.y
+                  << ")" << std::endl;
 }
 
 void Client::send(const Packet& packet) {
