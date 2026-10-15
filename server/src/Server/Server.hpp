@@ -20,6 +20,7 @@ private:
         uint8_t id;
         uint16_t x;
         uint16_t y;
+        std::string lobby; // vide = pas dans un lobby
     };
 
     static constexpr uint16_t MAP_WIDTH = 800;
@@ -28,9 +29,17 @@ private:
 
     void handle(const Packet& packet, const sockaddr_in& from);
     void send(const Packet& packet, const sockaddr_in& to);
-    void broadcast(const Packet& packet);
+    void info(const Client& client, const std::string& text);
+    void sendToLobby(const std::string& lobby, const Packet& packet, const Client* except = nullptr);
     void move(Client& client, Action action);
     Client* find(const sockaddr_in& address);
+
+    // Lobbies
+    bool lobbyExists(const std::string& lobby) const;
+    void listLobbies(const Client& client);
+    void createLobby(Client& client, const std::string& lobby);
+    void joinLobby(Client& client, const std::string& lobby);
+    void leaveLobby(Client& client);
 
     int _socket;
     std::vector<Client> _clients;

@@ -13,6 +13,11 @@ enum class PacketType : uint8_t {
     Disconnect = 3,
     Action = 4,
     Position = 5,
+    LobbyList = 6,
+    LobbyCreate = 7,
+    LobbyJoin = 8,
+    LobbyLeave = 9,
+    Info = 10,
 };
 
 // Action du joueur
@@ -51,7 +56,7 @@ inline bool decode(const uint8_t* buffer, std::size_t length, Packet& packet) {
     size = ntohs(size);
     if (length != HEADER_SIZE + size)
         return false;
-    if (buffer[0] < 1 || buffer[0] > 5)
+    if (buffer[0] < 1 || buffer[0] > 10)
         return false;
     packet.type = static_cast<PacketType>(buffer[0]);
     packet.data.assign(reinterpret_cast<const char*>(buffer + HEADER_SIZE), size);

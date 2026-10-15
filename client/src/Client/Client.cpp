@@ -21,9 +21,15 @@ Client::Client(const std::string& ip, int port, const std::string& name) {
     }
 
     send({PacketType::Connect, name});
-    std::cout << "Connecte a " << ip << ":" << port
-              << " (z/q/s/d + Entree pour bouger, sinon message, Ctrl+D pour quitter)"
-              << std::endl;
+    std::cout << "Connecte a " << ip << ":" << port << " en tant que " << name << "\n"
+              << "Commandes :\n"
+              << "  /list          voir les lobbies\n"
+              << "  /create <nom>  creer un lobby\n"
+              << "  /join <nom>    rejoindre un lobby\n"
+              << "  /leave         quitter le lobby\n"
+              << "  z/q/s/d a/e    actions (dans un lobby)\n"
+              << "  autre texte    message aux joueurs du lobby\n"
+              << "  Ctrl+D         quitter" << std::endl;
 }
 
 Client::~Client() {
@@ -59,7 +65,17 @@ bool Client::readKeyboard() {
     while ((end = _input.find('\n')) != std::string::npos) {
         std::string line = _input.substr(0, end);
         _input.erase(0, end + 1);
-        if (line == "z")
+        if (line == "/list")
+            send({PacketType::LobbyList, ""});
+        else if (line.rfind("/create ", 0) == 0)
+            send({PacketType::LobbyCreate, line.substr(8)});
+        else if (line.rfind("/join ", 0) == 0)
+            send({PacketType::LobbyJoin, line.substr(6)});
+        else if (line == "/leave")
+            send({PacketType::LobbyLeave, ""});
+        else if (line[0] == '/')
+            std::cout << "Commande inconnue" << std::endl;
+        else if (line == "z")
             send(makeAction(Action::Up));
         else if (line == "s")
             send(makeAction(Action::Down));
@@ -90,6 +106,8 @@ void Client::readSocket() {
     PlayerPosition pos;
     if (packet.type == PacketType::Message)
         std::cout << packet.data << std::endl;
+    else if (packet.type == PacketType::Info)
+        std::cout << "[serveur] " << packet.data << std::endl;
     else if (packet.type == PacketType::Position && readPosition(packet, pos))
         std::cout << pos.name << " (#" << +pos.id << ") est en (" << pos.x << ", " << pos.y
                   << ")" << std::endl;

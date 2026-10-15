@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <map>
 #include <poll.h>
 #include <stdexcept>
 #include <sys/socket.h>
@@ -51,51 +52,66 @@ void Server::run() {
 void Server::handle(const Packet& packet, const sockaddr_in& from) {
     Client* client = find(from);
 
+    // Avant tout, il faut s'etre connecte avec un pseudo
+    if (packet.type == PacketType::Connect) {
+        if (client || packet.data.empty())
+            return;
+        _clients.push_back({from, packet.data, _nextId++, 100, 100, ""});
+        Client& added = _clients.back();
+        std::cout << added.name << " s'est connecte (" << _clients.size() << " joueur(s))"
+                  << std::endl;
+        info(added, "Bienvenue " + added.name + " !");
+        listLobbies(added);
+        return;
+    }
+    if (!client)
+        return;
+
     switch (packet.type) {
-    case PacketType::Connect:
-        if (!client) {
-            _clients.push_back({from, packet.data, _nextId++, 100, 100});
-            Client& added = _clients.back();
-            std::cout << added.name << " s'est connecte (" << _clients.size()
-                      << " joueur(s))" << std::endl;
-            for (const Client& other : _clients) {
-                send(makePosition({other.id, other.x, other.y, other.name}), added.address);
-                if (&other != &added)
-                    send(makePosition({added.id, added.x, added.y, added.name}), other.address);
-            }
-        }
+    case PacketType::LobbyList:
+        listLobbies(*client);
+        break;
+
+    case PacketType::LobbyCreate:
+        createLobby(*client, packet.data);
+        break;
+
+    case PacketType::LobbyJoin:
+        joinLobby(*client, packet.data);
+        break;
+
+    case PacketType::LobbyLeave:
+        leaveLobby(*client);
         break;
 
     case PacketType::Action: {
-        // Z, Q, S, D pour changer de direction
         Action action;
-        if (!client || !readAction(packet, action)) {
+        if (client->lobby.empty() || !readAction(packet, action))
             return;
-        }
         move(*client, action);
-        broadcast(makePosition({client->id, client->x, client->y, client->name}));
+        sendToLobby(client->lobby, makePosition({client->id, client->x, client->y, client->name}));
         break;
     }
 
-    case PacketType::Position:
-        // Pas d'envoi de position par les joueurs
-        break;
-
     case PacketType::Message:
-        if (!client)
+        if (client->lobby.empty()) {
+            info(*client, "Tu dois etre dans un lobby pour envoyer des messages");
             return;
-        std::cout << client->name << " : " << packet.data << std::endl;
-        for (const Client& other : _clients) {
-            if (&other != client)
-                send({PacketType::Message, client->name + " : " + packet.data}, other.address);
         }
+        std::cout << "[" << client->lobby << "] " << client->name << " : " << packet.data
+                  << std::endl;
+        sendToLobby(client->lobby, {PacketType::Message, client->name + " : " + packet.data},
+                    client);
         break;
 
     case PacketType::Disconnect:
-        if (!client)
-            return;
+        leaveLobby(*client);
         std::cout << client->name << " s'est deconnecte" << std::endl;
         _clients.erase(_clients.begin() + (client - _clients.data()));
+        break;
+
+    default:
+        // Position et Info ne sont envoyes que par le serveur
         break;
     }
 }
@@ -106,9 +122,101 @@ void Server::send(const Packet& packet, const sockaddr_in& to) {
            reinterpret_cast<const sockaddr*>(&to), sizeof(to));
 }
 
-void Server::broadcast(const Packet& packet) {
-    for (const Client& client : _clients)
-        send(packet, client.address);
+void Server::info(const Client& client, const std::string& text) {
+    send({PacketType::Info, text}, client.address);
+}
+
+void Server::sendToLobby(const std::string& lobby, const Packet& packet, const Client* except) {
+    for (const Client& other : _clients) {
+        if (other.lobby == lobby && &other != except)
+            send(packet, other.address);
+    }
+}
+
+bool Server::lobbyExists(const std::string& lobby) const {
+    for (const Client& other : _clients) {
+        if (other.lobby == lobby)
+            return true;
+    }
+    return false;
+}
+
+void Server::listLobbies(const Client& client) {
+    // Un lobby existe tant qu'il reste au moins un joueur dedans
+    std::map<std::string, int> lobbies;
+    for (const Client& other : _clients) {
+        if (!other.lobby.empty())
+            lobbies[other.lobby]++;
+    }
+    if (lobbies.empty()) {
+        info(client, "Aucun lobby. Cree-en un avec /create <nom>");
+        return;
+    }
+    std::string text = "Lobbies :";
+    for (const auto& [name, count] : lobbies)
+        text += "\n  - " + name + " (" + std::to_string(count) + " joueur(s))";
+    info(client, text + "\nRejoins-en un avec /join <nom>");
+}
+
+void Server::createLobby(Client& client, const std::string& lobby) {
+    if (lobby.empty()) {
+        info(client, "Usage : /create <nom>");
+        return;
+    }
+    if (lobbyExists(lobby)) {
+        info(client, "Le lobby " + lobby + " existe deja, utilise /join " + lobby);
+        return;
+    }
+    leaveLobby(client);
+    client.lobby = lobby;
+    client.x = 100;
+    client.y = 100;
+    std::cout << client.name << " a cree le lobby " << lobby << std::endl;
+    info(client, "Lobby " + lobby + " cree, tu es dedans");
+    send(makePosition({client.id, client.x, client.y, client.name}), client.address);
+}
+
+void Server::joinLobby(Client& client, const std::string& lobby) {
+    if (lobby.empty()) {
+        info(client, "Usage : /join <nom>");
+        return;
+    }
+    if (client.lobby == lobby) {
+        info(client, "Tu es deja dans " + lobby);
+        return;
+    }
+    if (!lobbyExists(lobby)) {
+        info(client, "Le lobby " + lobby + " n'existe pas");
+        return;
+    }
+    leaveLobby(client);
+    client.lobby = lobby;
+    client.x = 100;
+    client.y = 100;
+    std::cout << client.name << " a rejoint le lobby " << lobby << std::endl;
+    info(client, "Tu as rejoint " + lobby);
+
+    // Le nouveau recoit la position de tout le lobby, le lobby recoit la sienne
+    Packet myPosition = makePosition({client.id, client.x, client.y, client.name});
+    for (const Client& other : _clients) {
+        if (other.lobby != lobby)
+            continue;
+        send(makePosition({other.id, other.x, other.y, other.name}), client.address);
+        if (&other != &client) {
+            send(myPosition, other.address);
+            info(other, client.name + " a rejoint le lobby");
+        }
+    }
+}
+
+void Server::leaveLobby(Client& client) {
+    if (client.lobby.empty())
+        return;
+    std::string lobby = client.lobby;
+    client.lobby.clear();
+    std::cout << client.name << " a quitte le lobby " << lobby << std::endl;
+    info(client, "Tu as quitte " + lobby);
+    sendToLobby(lobby, {PacketType::Info, client.name + " a quitte le lobby"});
 }
 
 void Server::move(Client& client, Action action) {
