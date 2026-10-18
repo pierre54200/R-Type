@@ -23,8 +23,8 @@ private:
         std::string lobby; // vide = pas dans un lobby
     };
 
-    static constexpr uint16_t MAP_WIDTH = 800;
-    static constexpr uint16_t MAP_HEIGHT = 600;
+    static constexpr uint16_t MAP_WIDTH = 600;
+    static constexpr uint16_t MAP_HEIGHT = 800;
     static constexpr uint16_t STEP = 10;
 
     void handle(const Packet& packet, const sockaddr_in& from);
@@ -33,6 +33,7 @@ private:
     void sendToLobby(const std::string& lobby, const Packet& packet, const Client* except = nullptr);
     void move(Client& client, Action action);
     Client* find(const sockaddr_in& address);
+    bool nameTaken(const std::string& name) const;
 
     // Lobbies
     bool lobbyExists(const std::string& lobby) const;

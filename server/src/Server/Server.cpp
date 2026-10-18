@@ -56,6 +56,11 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
     if (packet.type == PacketType::Connect) {
         if (client || packet.data.empty())
             return;
+        // Le client local s'ignore lui-meme par pseudo : deux pseudos identiques casseraient la synchro
+        if (nameTaken(packet.data)) {
+            send({PacketType::Info, "Le pseudo " + packet.data + " est deja pris"}, from);
+            return;
+        }
         _clients.push_back({from, packet.data, _nextId++, 100, 100, ""});
         Client& added = _clients.back();
         std::cout << added.name << " s'est connecte (" << _clients.size() << " joueur(s))"
@@ -93,6 +98,17 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
         break;
     }
 
+    case PacketType::Position: {
+        PlayerPosition position;
+        if (client->lobby.empty() || !readPosition(packet, position))
+            return;
+        client->x = std::min<uint16_t>(position.x, MAP_WIDTH);
+        client->y = std::min<uint16_t>(position.y, MAP_HEIGHT);
+        sendToLobby(client->lobby, makePosition({client->id, client->x, client->y, client->name}),
+                    client);
+        break;
+    }
+
     case PacketType::Message:
         if (client->lobby.empty()) {
             info(*client, "Tu dois etre dans un lobby pour envoyer des messages");
@@ -111,9 +127,17 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
         break;
 
     default:
-        // Position et Info ne sont envoyes que par le serveur
+        // Info n'est envoye que par le serveur
         break;
     }
+}
+
+bool Server::nameTaken(const std::string& name) const {
+    for (const Client& client : _clients) {
+        if (client.name == name)
+            return true;
+    }
+    return false;
 }
 
 void Server::send(const Packet& packet, const sockaddr_in& to) {
@@ -142,7 +166,6 @@ bool Server::lobbyExists(const std::string& lobby) const {
 }
 
 void Server::listLobbies(const Client& client) {
-    // Un lobby existe tant qu'il reste au moins un joueur dedans
     std::map<std::string, int> lobbies;
     for (const Client& other : _clients) {
         if (!other.lobby.empty())
@@ -196,7 +219,6 @@ void Server::joinLobby(Client& client, const std::string& lobby) {
     std::cout << client.name << " a rejoint le lobby " << lobby << std::endl;
     info(client, "Tu as rejoint " + lobby);
 
-    // Le nouveau recoit la position de tout le lobby, le lobby recoit la sienne
     Packet myPosition = makePosition({client.id, client.x, client.y, client.name});
     for (const Client& other : _clients) {
         if (other.lobby != lobby)
