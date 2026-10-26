@@ -31,7 +31,6 @@ private:
     void send(const Packet& packet, const sockaddr_in& to);
     void info(const Client& client, const std::string& text);
     void sendToLobby(const std::string& lobby, const Packet& packet, const Client* except = nullptr);
-    void move(Client& client, Action action);
     Client* find(const sockaddr_in& address);
     bool nameTaken(const std::string& name) const;
 

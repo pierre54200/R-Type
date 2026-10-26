@@ -11,23 +11,12 @@ enum class PacketType : uint8_t {
     Connect = 1,
     Message = 2,
     Disconnect = 3,
-    Action = 4,
-    Position = 5,
-    LobbyList = 6,
-    LobbyCreate = 7,
-    LobbyJoin = 8,
-    LobbyLeave = 9,
-    Info = 10,
-};
-
-// Action du joueur
-enum class Action : uint8_t {
-    Up = 0,
-    Down = 1,
-    Left = 2,
-    Right = 3,
-    A = 4,
-    B = 5,
+    Position = 4,
+    LobbyList = 5,
+    LobbyCreate = 6,
+    LobbyJoin = 7,
+    LobbyLeave = 8,
+    Info = 9,
 };
 
 // Donnée envoyé et recu
@@ -60,17 +49,6 @@ inline bool decode(const uint8_t* buffer, std::size_t length, Packet& packet) {
         return false;
     packet.type = static_cast<PacketType>(buffer[0]);
     packet.data.assign(reinterpret_cast<const char*>(buffer + HEADER_SIZE), size);
-    return true;
-}
-
-inline Packet makeAction(Action action) {
-    return {PacketType::Action, std::string(1, static_cast<char>(action))};
-}
-
-inline bool readAction(const Packet& packet, Action& action) {
-    if (packet.data.size() != 1 || static_cast<uint8_t>(packet.data[0]) > 5)
-        return false;
-    action = static_cast<Action>(packet.data[0]);
     return true;
 }
 
