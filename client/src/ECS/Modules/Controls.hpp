@@ -1,27 +1,22 @@
 #pragma once
 
 #include "../String/String.hpp"
-#include "../Clock/Clock.hpp"
 #include <stdexcept>
 #include <map>
 
 template<typename T>
-class PlayerControl
+class Controls
 {
     public:
-        PlayerControl() = default;
+        Controls() = default;
 
-        float speed = 200.f;
-
-        Clock::Clock    shootCooldown;
-
-        PlayerControl& registerKey(const String& action, T bind)
+        Controls& registerKey(const String& action, T bind)
         {
             keybinds[action] = bind;
             return *this;
         }
 
-        PlayerControl& deleteKey(const String& action)
+        Controls& deleteKey(const String& action)
         {
             keybinds.erase(action);
             return *this;

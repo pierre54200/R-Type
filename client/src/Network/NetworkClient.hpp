@@ -1,10 +1,10 @@
 #pragma once
 
-#include <netinet/in.h>
 #include <optional>
 #include <string>
 
 #include "Protocol.hpp"
+#include "Socket.hpp"
 
 class NetworkClient
 {
@@ -19,6 +19,6 @@ class NetworkClient
         std::optional<Packet>   receive();
 
     private:
-        int         _socket;
+        socket_t    _socket = INVALID_SOCK;
         sockaddr_in _server{};
 };

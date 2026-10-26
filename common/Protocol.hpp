@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arpa/inet.h>
+#include "Socket.hpp"
 #include <cstdint>
 #include <cstring>
 #include <string>
