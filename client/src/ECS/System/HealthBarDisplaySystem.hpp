@@ -22,12 +22,12 @@ class HealtBarDisplaySystem: public ECS::System
             for (auto &e: this->_entities)
             {
                 auto&   health      =   reg.getModule<Health>(e);
-                if (health.hurt)
+                if (health.maxPoint <= 0.f)
                     continue;
                 auto&   transform   =   reg.getModule<Transform>(e);
                 auto&   front       =   reg.getModule<FrontEnd>(e);
                 if (!front.isDrawable || front.isInvisible)
-                    return;
+                    continue;;
 
                 if (health.point < 0)
                     health.point = 0;

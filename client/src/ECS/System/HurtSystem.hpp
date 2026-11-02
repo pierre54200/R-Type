@@ -25,7 +25,8 @@ class HurtSystem:   public  ECS::System
                 {
                     if (e2 <= e1)
                         return;
-
+                    if (hp1.team == hp2.team)
+                        return;
                     if (!shareMask(h1.mask, h2.mask))
                         return;
 
@@ -41,13 +42,14 @@ class HurtSystem:   public  ECS::System
                     if (overlapX <= 0.f || overlapY <= 0.f)
                         return;
 
-                    if (!resolve(h1, hp1, h2, hp2))
-                        return;
+                    bool hit1 = strike(h2, hp2, hp1);
+                    bool hit2 = strike(h1, hp1, hp2);
 
-                    if (h1.destroyOnHit && hp1.hurt)
-                        toDestroy.insert(e1);
-                    if (h2.destroyOnHit && hp2.hurt)
-                        toDestroy.insert(e2);
+                    if (hit1 && h1.destroyOnHit) toDestroy.insert(e1);
+                    if (hit2 && h2.destroyOnHit) toDestroy.insert(e2);
+
+                    if (hp1.maxPoint > 0.f && hp1.point <= 0.f) toDestroy.insert(e1);
+                    if (hp2.maxPoint > 0.f && hp2.point <= 0.f) toDestroy.insert(e2);
                 });
             });
 
@@ -83,14 +85,16 @@ class HurtSystem:   public  ECS::System
             std::cout << victim.point << std::endl;
         }
 
-        static bool resolve(HitBox& b1, Health& hp1, HitBox& b2, Health& hp2)
+        static bool strike(HitBox& victimBox, Health& victim, const Health& attacker)
         {
-            if (hp1.hurt == hp2.hurt)
+            if (attacker.damage <= 0.f || victim.maxPoint <= 0.f)
                 return false;
-            if (hp1.hurt)
-                applyHit(b2, hp2, hp1);
-            else
-                applyHit(b1, hp1, hp2);
+            if (ready(victimBox))
+            {
+                victim.point -= attacker.damage;
+                victimBox.hitCooldownClock.setTargetTime(victimBox.hitCooldownValue);
+                victimBox.hasBeenHit = true;
+            }
             return true;
         }
 };
