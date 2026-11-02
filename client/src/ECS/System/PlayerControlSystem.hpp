@@ -5,9 +5,6 @@
 #include "../Modules/Controls.hpp"
 #include "../Modules/PlayerStat.hpp"
 #include "../Modules/RigidBody.hpp"
-#include "../Modules/Transform.hpp"
-#include "../Modules/SceneTag.hpp"
-#include "../Utils/SpawnEntities.hpp"
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Window/Keyboard.hpp>
@@ -39,17 +36,6 @@ public:
             float speed = ps.speed;
             reg.getModule<RigidBody>(e).velocity =
                 Math::Vec3<float>(dx * speed, dy * speed, 0.f);
-
-            if (sf::Keyboard::isKeyPressed(contr.getKey("shoot")))
-            {
-                if (ps.shootCooldown.isReady())
-                {
-                    std::cout << "Shooting" << std::endl;
-                    Spawn::createBullet(reg, reg.getModule<Transform>(e).position, reg.getModule<Transform>(e).size, reg.getModule<SceneTag>(e).scene);
-                    ps.shootCooldown.setTargetTime(0.25f);
-                }
-            }
         }
-
     }
 };

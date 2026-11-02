@@ -1,11 +1,16 @@
+#include "ECS/Modules/EnemyStat.hpp"
 #include "ECS/Modules/EventQueue.hpp"
 #include "ECS/Modules/Function.hpp"
 #include "ECS/Modules/PlayerStat.hpp"
 #include "ECS/Modules/SceneManager.hpp"
 #include "ECS/Modules/SceneTag.hpp"
+#include "ECS/Modules/SpawnerSettings.hpp"
+#include "ECS/Modules/Targetable.hpp"
 #include "ECS/System/ClickSystem.hpp"
 #include "ECS/System/PlayerControlSystem.hpp"
 #include "ECS/System/SceneSystem.hpp"
+#include "ECS/System/ShootSystem.hpp"
+#include "ECS/System/SpawnSystem.hpp"
 #include "EntityManager.hpp"
 #include "./ECS/Modules/DespawnByRange.hpp"
 #include "./ECS/Modules/FrontEnd.hpp"
@@ -39,6 +44,8 @@
 #include "./ECS/System/NetworkSendSystem.hpp"
 #include "./ECS/System/PlayerControlSystem.hpp"
 #include "./ECS/System/UpdateDisplaySystem.hpp"
+#include "./ECS/System/TargetSystem.hpp"
+#include "./ECS/System/EnemyLogicSystem.hpp"
 
 static sf::Color    colorFor(uint8_t id)
 {
@@ -58,6 +65,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     reg
         .registerModule<Controls<sf::Keyboard::Key>>()
         .registerModule<DespawnByRange>()
+        .registerModule<EnemyStat>()
         .registerModule<EventQueue>()
         .registerModule<FrontEnd>()
         .registerModule<Function>()
@@ -69,6 +77,8 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
         .registerModule<RigidBody>()
         .registerModule<SceneManager>()
         .registerModule<SceneTag>()
+        .registerModule<SpawnerSettings>()
+        .registerModule<Targetable>()
         .registerModule<Transform>()
         .registerModule<Window<sf::RenderWindow>>();
 
@@ -82,15 +92,20 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     {
         Entity  remote = registery.createEntity();
         registery.addModule(remote, Transform{ {static_cast<float>(position.x), static_cast<float>(position.y), 0.f}, {50.f, 50.f, 0.f} })
-            .addModule(remote, FrontEnd{ true, false, 0, colorFor(position.id) });
+            .addModule(remote, FrontEnd{ true, false, 0, colorFor(position.id) })
+            .addModule(remote, Targetable{.id = 0});
         return remote;
     });
     reg.registerSystem<PlayerControlSystem>(reg.signatureOf<PlayerStat, RigidBody, Transform, SceneTag>());
+    reg.registerSystem<TargetSystem>(reg.signatureOf<Targetable, Transform>());
+    reg.registerSystem<EnemyLogicSystem>(reg.signatureOf<EnemyStat, Transform, RigidBody>());
+    reg.registerSystem<ShootSystem>(reg.signatureOf<Transform, PlayerStat, SceneTag>());
     reg.registerSystem<MovementSystem>(reg.signatureOf<Transform, RigidBody>());
     reg.registerSystem<CollisionSystem>(reg.signatureOf<Transform, RigidBody>());
     auto    networkSend = reg.registerSystem<NetworkSendSystem>(reg.signatureOf<Transform, NetworkSync>());
     networkSend->setSender([&network](const Packet& packet) { network.send(packet); });
     reg.registerSystem<HurtSystem>(reg.signatureOf<HitBox, Health, Transform>());
+    reg.registerSystem<SpawnerSystem>(reg.signatureOf<SpawnerSettings>());
     reg.registerSystem<DespawnSystem>(reg.signatureOf<Transform, DespawnByRange>());
     reg.registerSystem<ClearDisplaySystem>(reg.signatureOf<>());
     reg.registerSystem<HealtBarDisplaySystem>(reg.signatureOf<Transform, Health, FrontEnd>());
@@ -128,6 +143,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     UpdateDisplaySystem::screen     =   screen;
     HealtBarDisplaySystem::screen   =   screen;
     SceneSystem::manager            =   sceneMgr;
+    SpawnerSystem::manager          =   sceneMgr;
     PlayerControlSystem::controls   =   Ctrl;
 
 
@@ -143,9 +159,10 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
                 .addModule(player, RigidBody{ {0.f, 0.f, 0.f}, 9.8f, std::set<uint32_t>{1}, false })
                 .addModule(player, FrontEnd{ true, false, 0, sf::Color::Red })
                 .addModule(player, PlayerStat{})
-                .addModule(player, Health{100.f, false, 100.f})
+                .addModule(player, Health{100.f, 100.f, 0.f, 0})
                 .addModule(player, HitBox{{0.f, 0.f, 0.f}, {50.f, 50.f, 0.f}, std::set<uint32_t>{1}})
-                .addModule(player, NetworkSync{0, playerName});
+                .addModule(player, NetworkSync{0, playerName})
+                .addModule(player, Targetable{.id = 0});
 
             auto makeWall = [&reg, s](float x, float y, float w, float h)
             {
@@ -164,6 +181,15 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
             makeWall(0.f,        0.f,         t,     800.f);  // left
             makeWall(600.f - t,  0.f,         t,     800.f);  // right
 
+
+            Entity spawner = reg.createEntity();
+
+            SpawnerSettings settings;
+            settings.time    = 1.f;                      // seconds between spawns
+            settings.spawnClock.setTargetTime(settings.time);
+
+            reg.addModule(spawner, SceneTag{s})
+                .addModule(spawner, std::move(settings));
         }
     });
 
