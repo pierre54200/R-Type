@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <functional>
 #include <utility>
+#include <iostream>
 
 #include "Registery.hpp"
 #include "../Modules/NetworkSync.hpp"
@@ -12,6 +13,7 @@ class   NetworkSendSystem : public ECS::System
 {
     public:
         using   SendFunction    =   std::function<void(const Packet&)>;
+        static inline std::vector<Packet>  queue{};
 
         void    setSender(SendFunction send)
         {
@@ -30,8 +32,8 @@ class   NetworkSendSystem : public ECS::System
                         return;
 
                     const auto      position = positionOf(transform);
-                    const uint16_t  x = toWire(position.first);
-                    const uint16_t  y = toWire(position.second);
+                    const uint16_t  x = to16Bit(position.first);
+                    const uint16_t  y = to16Bit(position.second);
                     if (sync.hasSent && x == sync.lastX && y == sync.lastY)
                     {
                         sync.elapsed = sync.sendRate > 0.f ? 1.f / sync.sendRate : 0.f;
@@ -44,6 +46,11 @@ class   NetworkSendSystem : public ECS::System
                     sync.lastX = x;
                     sync.lastY = y;
                 });
+            for (auto& p: this->queue)
+            {
+                _send(p);
+            }
+            queue.clear();
         }
 
     private:
@@ -52,7 +59,7 @@ class   NetworkSendSystem : public ECS::System
             return {transform.position.x, transform.position.y};
         }
 
-        static uint16_t toWire(float value)
+        static uint16_t to16Bit(float value)
         {
             return static_cast<uint16_t>(std::clamp(value, 0.f, 65535.f) + 0.5f);
         }

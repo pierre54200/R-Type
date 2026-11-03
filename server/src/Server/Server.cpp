@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "Protocol.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -70,7 +71,10 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
         return;
     }
     if (!client)
+    {
+        std::cout << "Unknown client" << std::endl;
         return;
+    }
 
     switch (packet.type) {
     case PacketType::LobbyList:
@@ -125,6 +129,20 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
         std::cout << client->name << " s'est deconnecte" << std::endl;
         _clients.erase(_clients.begin() + (client - _clients.data()));
         break;
+
+    case PacketType::EnemySpawn:
+        sendToLobby(client->lobby, packet, client);
+        break;
+
+    case PacketType::Shoot: {
+        Shoot s;
+        if (client->lobby.empty() || !readShoot(packet, s))
+            return;
+        s.id   = client->id;
+        s.name = client->name;
+        sendToLobby(client->lobby, makeShoot(s), client);
+        break;
+    }
 
     default:
         // Info n'est envoye que par le serveur

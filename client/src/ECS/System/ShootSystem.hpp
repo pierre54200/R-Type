@@ -1,6 +1,9 @@
 #pragma once
 
+#include "ECS/Modules/NetworkSync.hpp"
+#include "ECS/System/NetworkSendSystem.hpp"
 #include "ECS/Utils/SpawnEntities.hpp"
+#include "Protocol.hpp"
 #include "Registery.hpp"
 #include "SystemManager.hpp"
 #include "TargetSystem.hpp"
@@ -9,7 +12,9 @@
 #include "../Modules/Transform.hpp"
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <string>
 #include <vector>
 
 class ShootSystem : public ECS::System
@@ -24,11 +29,14 @@ public:
             Math::Vec3<float> origin,
             vel;
             SceneId scene;
+            std::uint8_t    id;
+            std::string     name;
         };
         std::vector<Shot> shots;
         for (auto e : _entities)
         {
             auto& stat = reg.getModule<PlayerStat>(e);
+            auto& sync = reg.getModule<NetworkSync>(e);
             if (!stat.shootCooldown.isReady())
                 continue;
 
@@ -62,13 +70,26 @@ public:
             shots.push_back({
                 {cx, cy, 0.f},
                 {dx / len * bulletSpeed, dy / len * bulletSpeed, 0.f},
-                reg.getModule<SceneTag>(e).scene
+                reg.getModule<SceneTag>(e).scene,
+                sync.id,
+                sync.name
             });
 
             stat.shootCooldown.setTargetTime(.1f);
         }
 
-        for (const auto& s : shots)
-            Spawn::createBullet(reg, s.origin, {10.f, 10.f, 0.f}, s.vel, s.scene);
+        for (const auto& s : shots) {
+            Spawn::createBullet(reg, s.origin, s.vel, s.scene);
+            NetworkSendSystem::queue.push_back(makeShoot(
+                Shoot{
+                    .id = s.id,
+                    .x = static_cast<uint16_t>(std::clamp(s.origin.x, 0.f, 65535.f) + 0.5f),
+                    .y = static_cast<uint16_t>(std::clamp(s.origin.y, 0.f, 65535.f) + 0.5f),
+                    .dirx = static_cast<int16_t>(std::lround(s.vel.x)),
+                    .diry = static_cast<int16_t>(std::lround(s.vel.y)),
+                    .name = s.name,
+                })
+            );
+        }
     }
 };

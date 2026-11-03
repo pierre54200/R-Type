@@ -10,11 +10,11 @@
 #include <cstdint>
 #include <set>
 
-void    Spawn::createEnemy(ECS::Registery &reg, Math::Vec3<float> pos, Math::Vec3<float> size, SceneId scene)
+void    Spawn::createEnemy(ECS::Registery &reg, Math::Vec3<float> pos, SceneId scene)
 {
     Entity enemy = reg.createEntity();
 
-    reg.addModule(enemy, Transform{ .position = pos, .size = size})
+    reg.addModule(enemy, Transform{ .position = pos, .size = {100.f, 100.f, 0.f}})
         .addModule(enemy, FrontEnd{ true, false, 0, sf::Color::Yellow})
         .addModule(enemy, HitBox{  {0.f, 0.f, 0.f}, {100.f, 100.f, 0.f}, std::set<uint32_t>{1}})
         .addModule(enemy, Health{3.f, 3.f, 1.f, 1})
