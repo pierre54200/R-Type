@@ -39,9 +39,9 @@ file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
     server/src/*.hpp
 )
 
-add_executable(r-type-server ${SERVER_SOURCES})
-target_include_directories(r-type-server PRIVATE server/src common)
-target_compile_options(r-type-server PRIVATE -Wall -Wextra)
+add_executable(r-type_server ${SERVER_SOURCES})
+target_include_directories(r-type_server PRIVATE server/src common)
+target_compile_options(r-type_server PRIVATE -Wall -Wextra)
 
 # Client
 file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
@@ -49,12 +49,12 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
     client/src/*.hpp
 )
 
-add_executable(r-type-client ${CLIENT_SOURCES})
-target_include_directories(r-type-client PRIVATE client/src common)
-target_link_libraries(r-type-client PRIVATE sfml-graphics sfml-window sfml-system)
-target_compile_options(r-type-client PRIVATE -Wall -Wextra)
+add_executable(r-type_client ${CLIENT_SOURCES})
+target_include_directories(r-type_client PRIVATE client/src common)
+target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system)
+target_compile_options(r-type_client PRIVATE -Wall -Wextra)
 
 # Les deux exécutables à la racine du projet
-set_target_properties(r-type-server r-type-client PROPERTIES
+set_target_properties(r-type_server r-type_client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
