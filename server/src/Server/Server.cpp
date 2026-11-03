@@ -53,11 +53,9 @@ void Server::run() {
 void Server::handle(const Packet& packet, const sockaddr_in& from) {
     Client* client = find(from);
 
-    // Avant tout, il faut s'etre connecte avec un pseudo
     if (packet.type == PacketType::Connect) {
         if (client || packet.data.empty())
             return;
-        // Le client local s'ignore lui-meme par pseudo : deux pseudos identiques casseraient la synchro
         if (nameTaken(packet.data)) {
             send({PacketType::Info, "Le pseudo " + packet.data + " est deja pris"}, from);
             return;
@@ -92,15 +90,6 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
     case PacketType::LobbyLeave:
         leaveLobby(*client);
         break;
-
-    case PacketType::Action: {
-        Action action;
-        if (client->lobby.empty() || !readAction(packet, action))
-            return;
-        move(*client, action);
-        sendToLobby(client->lobby, makePosition({client->id, client->x, client->y, client->name}));
-        break;
-    }
 
     case PacketType::Position: {
         PlayerPosition position;
@@ -259,33 +248,7 @@ void Server::leaveLobby(Client& client) {
     sendToLobby(lobby, {PacketType::Info, client.name + " a quitte le lobby"});
 }
 
-void Server::move(Client& client, Action action) {
-    switch (action) {
-    case Action::Up:
-        client.y = client.y >= STEP ? client.y - STEP : 0;
-        std::cout << client.name << " -> (" << client.x << ", " << client.y << ")" << std::endl;
-        break;
-    case Action::Down:
-        client.y = client.y + STEP <= MAP_HEIGHT ? client.y + STEP : MAP_HEIGHT;
-        std::cout << client.name << " " << " -> (" << client.x << ", " << client.y << ")" << std::endl;
-        break;
-    case Action::Left:
-        client.x = client.x >= STEP ? client.x - STEP : 0;
-        std::cout << client.name << " -> (" << client.x << ", " << client.y << ")" << std::endl;
-        break;
-    case Action::Right:
-        client.x = client.x + STEP <= MAP_WIDTH ? client.x + STEP : MAP_WIDTH;
-        std::cout << client.name << " -> (" << client.x << ", " << client.y << ")" << std::endl;
-        break;
-    case Action::A:
-        std::cout << client.name << " press A." << std::endl;
-        break;
-    case Action::B:
-        std::cout << client.name << " press B." << std::endl;
-        break;
-    }
-}
-
+/* Find the client with his address */
 Server::Client* Server::find(const sockaddr_in& address) {
     for (Client& client : _clients) {
         if (client.address.sin_addr.s_addr == address.sin_addr.s_addr &&

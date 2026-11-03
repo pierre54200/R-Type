@@ -67,17 +67,6 @@ inline bool decode(const uint8_t* buffer, std::size_t length, Packet& packet) {
     return true;
 }
 
-inline Packet makeAction(Action action) {
-    return {PacketType::Action, std::string(1, static_cast<char>(action))};
-}
-
-inline bool readAction(const Packet& packet, Action& action) {
-    if (packet.data.size() != 1 || static_cast<uint8_t>(packet.data[0]) > 5)
-        return false;
-    action = static_cast<Action>(packet.data[0]);
-    return true;
-}
-
 struct PlayerPosition {
     uint8_t id;
     uint16_t x;
