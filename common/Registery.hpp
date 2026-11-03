@@ -4,6 +4,16 @@
 #include "SystemManager.hpp"
 #include "View.hpp"
 #include <chrono>
+#include <csignal>
+#include <atomic>
+
+inline std::atomic<bool> running{true};
+
+inline void handleSignal(int signal)
+{
+    if (signal == SIGINT)
+        running = false;
+}
 
 namespace ECS
 {
@@ -96,10 +106,11 @@ namespace ECS
 
             void    run()
             {
+                std::signal(SIGINT, handleSignal);
                 this->_running = true;
                 auto last = std::chrono::steady_clock::now();
 
-                while (this->_running)
+                while (this->_running && running)
                 {
                     auto    now = std::chrono::steady_clock::now();
                     float   dt = std::chrono::duration<float>(now - last).count();
