@@ -121,7 +121,7 @@ R-Type/
 
 ## Network Protocol
 
-Client and server communicate over UDP with a custom binary protocol. The full specification (packet format, packet types, examples) is available in [protocol.md](protocol.md).
+Client and server communicate over UDP with a custom binary protocol. The full specification (packet format, packet types, examples) is available in [PROTOCOL.md](PROTOCOL.md).
 
 ## Contributing
 
