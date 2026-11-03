@@ -28,9 +28,8 @@ public:
                 continue;
 
             Math::Vec3<float> pos  = randomVec3(settings.minPos,  settings.maxPos);
-            Math::Vec3<float> size = randomVec3(settings.minSize, settings.maxSize);
 
-            Spawn::createEnemy(reg, pos, size, sm.id("game"));
+            Spawn::createEnemy(reg, pos, sm.id("game"));
             settings.spawnClock.setTargetTime(settings.time);
         }
     }

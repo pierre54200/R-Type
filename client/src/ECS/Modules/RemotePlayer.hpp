@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string>
 
-struct  RemotePlayer
+struct  RemoteEntity
 {
     uint8_t     id;
     std::string name;

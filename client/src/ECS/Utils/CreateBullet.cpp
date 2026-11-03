@@ -1,3 +1,4 @@
+#include "ECS/Vec3.hpp"
 #include "SpawnEntities.hpp"
 
 #include "../Modules/Transform.hpp"
@@ -7,8 +8,9 @@
 #include "../Modules/DespawnByRange.hpp"
 #include "../Modules/FrontEnd.hpp"
 
-void    Spawn::createBullet(ECS::Registery& reg, Math::Vec3<float>  pos, Math::Vec3<float>  size, Math::Vec3<float> vel, SceneId   scene)
+void    Spawn::createBullet(ECS::Registery& reg, Math::Vec3<float>  pos, Math::Vec3<float> vel, SceneId   scene)
 {
+    Math::Vec3<float>   size{10.f, 10.f, 0.f};
     Entity  bullet = reg.createEntity();
 
     reg.addModule(bullet, Transform{{pos.x + size.x, pos.y + size.y / 2, 0.f}, {size.x / 10, size.y / 10, 0.f}})

@@ -7,9 +7,11 @@
 #include <unordered_map>
 #include <utility>
 
+#include "ECS/Modules/SceneTag.hpp"
 #include "Registery.hpp"
 #include "../Modules/RemotePlayer.hpp"
 #include "../Modules/Transform.hpp"
+#include "../Utils/SpawnEntities.hpp"
 #include "Protocol.hpp"
 
 
@@ -56,6 +58,12 @@ class   NetworkReceiveSystem : public ECS::System
                 case PacketType::Message:
                     std::cout << packet.data << std::endl;
                     break;
+                case PacketType::Shoot:
+                {
+                    Shoot   s;
+                    if (readShoot(packet, s))
+                        applyBullet(registery, s);
+                }
                 default:
                     break;
             }
@@ -67,7 +75,7 @@ class   NetworkReceiveSystem : public ECS::System
                 return;
 
             auto    known = _players.find(position.id);
-            if (known != _players.end() && !registery.hasModule<RemotePlayer>(known->second))
+            if (known != _players.end() && !registery.hasModule<RemoteEntity>(known->second))
             {
                 _players.erase(known);
                 known = _players.end();
@@ -78,15 +86,44 @@ class   NetworkReceiveSystem : public ECS::System
                 if (!_spawn)
                     return;
                 Entity  entity = _spawn(registery, position);
-                registery.addModule(entity, RemotePlayer{position.id, position.name});
+                registery.addModule(entity, RemoteEntity{position.id, position.name});
                 _players[position.id] = entity;
                 return;
             }
 
-            registery.getModule<RemotePlayer>(known->second).name = position.name;
+            registery.getModule<RemoteEntity>(known->second).name = position.name;
             Transform&  transform = registery.getModule<Transform>(known->second);
             transform.position.x = static_cast<float>(position.x);
             transform.position.y = static_cast<float>(position.y);
+        }
+
+        void applyBullet(ECS::Registery& registery, const Shoot& shoot)
+        {
+            if (shoot.name == _localName) {
+                std::cout << "[bullet] ignored: own name" << std::endl;
+                return;
+            }
+
+            auto known = _players.find(shoot.id);
+            if (known == _players.end()) {
+                std::cout << "[bullet] unknown shooter id " << int(shoot.id) << std::endl;
+                return;
+            }
+            if (!registery.hasModule<RemoteEntity>(known->second)) {
+                _players.erase(known);
+                std::cout << "[bullet] stale entity" << std::endl;
+                return;
+            }
+            if (!registery.hasModule<SceneTag>(known->second)) {
+                std::cout << "[bullet] shooter has no SceneTag" << std::endl;
+                return;
+            }
+            std::cout << "[bullet] spawn at " << shoot.x << "," << shoot.y
+                      << " dir " << shoot.dirx << "," << shoot.diry << std::endl;
+            Spawn::createBullet(registery,
+                {float(shoot.x), float(shoot.y), 0.f},
+                {float(shoot.dirx), float(shoot.diry), 0.f},
+                registery.getModule<SceneTag>(known->second).scene);
         }
 
         ReceiveFunction                         _receive;

@@ -73,7 +73,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
         .registerModule<HitBox>()
         .registerModule<NetworkSync>()
         .registerModule<PlayerStat>()
-        .registerModule<RemotePlayer>()
+        .registerModule<RemoteEntity>()
         .registerModule<RigidBody>()
         .registerModule<SceneManager>()
         .registerModule<SceneTag>()
@@ -85,13 +85,16 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     reg.registerSystem<SceneSystem>(reg.signatureOf<SceneTag>());
     reg.registerSystem<EventSystem>(reg.signatureOf<Window<sf::RenderWindow>, EventQueue>());
     reg.registerSystem<ClickSystem>(reg.signatureOf<Function, Transform>());
-    auto    networkReceive = reg.registerSystem<NetworkReceiveSystem>(reg.signatureOf<RemotePlayer>());
+    auto    networkReceive = reg.registerSystem<NetworkReceiveSystem>(reg.signatureOf<RemoteEntity>());
     networkReceive->setLocalName(playerName);
     networkReceive->setReceiver([&network]() { return network.receive(); });
     networkReceive->setSpawner([](ECS::Registery& registery, const PlayerPosition& position)
     {
+        SceneId game = registery.getModule<SceneManager>(SceneSystem::manager).id("game");
+
         Entity  remote = registery.createEntity();
-        registery.addModule(remote, Transform{ {static_cast<float>(position.x), static_cast<float>(position.y), 0.f}, {50.f, 50.f, 0.f} })
+        registery.addModule(remote, SceneTag{game})
+            .addModule(remote, Transform{ {static_cast<float>(position.x), static_cast<float>(position.y), 0.f}, {50.f, 50.f, 0.f} })
             .addModule(remote, FrontEnd{ true, false, 0, colorFor(position.id) })
             .addModule(remote, Targetable{.id = 0});
         return remote;
@@ -145,6 +148,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     SceneSystem::manager            =   sceneMgr;
     SpawnerSystem::manager          =   sceneMgr;
     PlayerControlSystem::controls   =   Ctrl;
+    PlayerControlSystem::screen     =   screen;
 
 
     auto& sm = reg.getModule<SceneManager>(sceneMgr);
@@ -203,7 +207,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
         }
     });
 
-    sm.switchTo(menu);
+    sm.switchTo(sm.id("game"));
 
     reg.run();
 
