@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.14)
 project(RType CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -21,13 +21,14 @@ if(NOT EXISTS "${CPM_DOWNLOAD_LOCATION}")
 endif()
 include("${CPM_DOWNLOAD_LOCATION}")
 
-
-# Choose flag (Windows or linux)
+# Flags de warnings selon le compilateur
 if(MSVC)
     set(RTYPE_WARNINGS /W4)
 else()
     set(RTYPE_WARNINGS -Wall -Wextra)
 endif()
+
+find_package(Threads REQUIRED)
 
 CPMAddPackage(
     NAME SFML
@@ -41,18 +42,11 @@ CPMAddPackage(
         "SFML_BUILD_DOC OFF"
 )
 
-CPMAddPackage(
-    NAME asio
-    GITHUB_REPOSITORY chriskohlhoff/asio
-    GIT_TAG asio-1-30-2
-    DOWNLOAD_ONLY YES
-)
-add_library(asio INTERFACE)
-target_include_directories(asio INTERFACE ${asio_SOURCE_DIR}/asio/include)
-target_compile_definitions(asio INTERFACE ASIO_STANDALONE)
+# Bibliotheque reseau systeme (Winsock sous Windows, rien a ajouter sous Linux)
+add_library(rtype_net INTERFACE)
+target_link_libraries(rtype_net INTERFACE Threads::Threads)
 if(WIN32)
-    target_compile_definitions(asio INTERFACE _WIN32_WINNT=0x0A00)
-    target_link_libraries(asio INTERFACE ws2_32 wsock32)
+    target_link_libraries(rtype_net INTERFACE ws2_32)
 endif()
 
 # Serveur
@@ -63,7 +57,7 @@ file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
 
 add_executable(r-type_server ${SERVER_SOURCES})
 target_include_directories(r-type_server PRIVATE server/src common)
-target_link_libraries(r-type_server PRIVATE asio)
+target_link_libraries(r-type_server PRIVATE rtype_net)
 target_compile_options(r-type_server PRIVATE ${RTYPE_WARNINGS})
 
 # Client
@@ -74,10 +68,10 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
 
 add_executable(r-type_client ${CLIENT_SOURCES})
 target_include_directories(r-type_client PRIVATE client/src common)
-target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system asio)
+target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system rtype_net)
 target_compile_options(r-type_client PRIVATE ${RTYPE_WARNINGS})
 
-# Les deux exécutables à la racine du projet
+# Les deux executables a la racine du projet
 set_target_properties(r-type_server r-type_client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
 )

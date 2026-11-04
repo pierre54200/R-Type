@@ -4,14 +4,12 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
-#include <poll.h>
 #include <stdexcept>
-#include <sys/socket.h>
-#include <unistd.h>
 
 Server::Server(int port) {
+    ensureNetworkInit();
     _socket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (_socket < 0)
+    if (_socket == INVALID_SOCK)
         throw std::runtime_error("socket() a echoue");
 
     sockaddr_in address{};
@@ -19,28 +17,28 @@ Server::Server(int port) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
     if (bind(_socket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
-        close(_socket);
+        closeSocket(_socket);
         throw std::runtime_error("bind() a echoue sur le port " + std::to_string(port));
     }
     std::cout << "Serveur en ecoute sur le port " << port << std::endl;
 }
 
 Server::~Server() {
-    close(_socket);
+    closeSocket(_socket);
 }
 
 void Server::run() {
     uint8_t buffer[MAX_PACKET_SIZE];
-    pollfd fds[1] = {{_socket, POLLIN, 0}};
 
     while (true) {
-        if (poll(fds, 1, 100) <= 0 || !(fds[0].revents & POLLIN))
+        if (!waitReadable(_socket, 100))
             continue;
 
         sockaddr_in from{};
-        socklen_t fromLength = sizeof(from);
-        ssize_t received = recvfrom(_socket, buffer, sizeof(buffer), 0,
-                                    reinterpret_cast<sockaddr*>(&from), &fromLength);
+        socket_len_t fromLength = sizeof(from);
+        auto received = recvfrom(_socket, reinterpret_cast<char*>(buffer),
+                                 static_cast<int>(sizeof(buffer)), 0,
+                                 reinterpret_cast<sockaddr*>(&from), &fromLength);
         if (received < 0)
             continue;
 
@@ -149,7 +147,8 @@ bool Server::nameTaken(const std::string& name) const {
 
 void Server::send(const Packet& packet, const sockaddr_in& to) {
     std::vector<uint8_t> buffer = encode(packet);
-    sendto(_socket, buffer.data(), buffer.size(), 0,
+    sendto(_socket, reinterpret_cast<const char*>(buffer.data()),
+           static_cast<int>(buffer.size()), 0,
            reinterpret_cast<const sockaddr*>(&to), sizeof(to));
 }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdexcept>
+
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -9,6 +11,10 @@
     #endif
     #include <winsock2.h>
     #include <ws2tcpip.h>
+
+    #ifdef _MSC_VER
+        #pragma comment(lib, "ws2_32.lib")
+    #endif
 
     using socket_t      = SOCKET;
     using socket_len_t  = int;
@@ -41,6 +47,7 @@
     #include <netinet/in.h>
     #include <sys/socket.h>
     #include <fcntl.h>
+    #include <sys/select.h>
     #include <unistd.h>
 
     using socket_t      = int;
@@ -57,3 +64,16 @@
 
     inline void ensureNetworkInit() {}
 #endif
+
+// Attend qu'une socket soit lisible, au plus timeoutMs millisecondes.
+// select() existe sous Linux comme sous Windows, contrairement a poll().
+inline bool waitReadable(socket_t s, int timeoutMs)
+{
+    fd_set readSet;
+    FD_ZERO(&readSet);
+    FD_SET(s, &readSet);
+    timeval timeout{};
+    timeout.tv_sec = timeoutMs / 1000;
+    timeout.tv_usec = (timeoutMs % 1000) * 1000;
+    return select(static_cast<int>(s) + 1, &readSet, nullptr, nullptr, &timeout) > 0;
+}
