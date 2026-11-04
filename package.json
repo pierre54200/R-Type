@@ -1,0 +1,12 @@
+{
+  "name": "r-type",
+  "private": true,
+  "scripts": {
+    "build": "cmake -B build && cmake --build build --parallel",
+    "server": "./r-type_server 4242",
+    "client": "./r-type_client 127.0.0.1 4242 Player1",
+    "client2": "./r-type_client 127.0.0.1 4242 Player2",
+    "test": "cmake -B build -DRTYPE_BUILD_TESTS=ON && cmake --build build --parallel && ctest --test-dir build --output-on-failure",
+    "clean": "rm -rf build r-type_server r-type_client"
+  }
+}
