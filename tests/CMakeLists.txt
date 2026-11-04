@@ -1,3 +1,4 @@
+
 CPMAddPackage(
     NAME googletest
     GITHUB_REPOSITORY google/googletest
@@ -16,17 +17,21 @@ add_executable(r-type_tests
     test_clock.cpp
     test_string.cpp
     test_systems.cpp
+    test_server.cpp
 
     ${CMAKE_SOURCE_DIR}/client/src/ECS/Clock/Clock.cpp
     ${CMAKE_SOURCE_DIR}/client/src/ECS/String/String.cpp
+
+    ${CMAKE_SOURCE_DIR}/server/src/Server/Server.cpp
 )
 
 target_include_directories(r-type_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/common
     ${CMAKE_SOURCE_DIR}/client/src
+    ${CMAKE_SOURCE_DIR}/server/src
 )
 
-target_link_libraries(r-type_tests PRIVATE GTest::gtest_main sfml-graphics)
+target_link_libraries(r-type_tests PRIVATE GTest::gtest_main sfml-graphics Threads::Threads)
 if(WIN32)
     target_link_libraries(r-type_tests PRIVATE ws2_32)
 endif()

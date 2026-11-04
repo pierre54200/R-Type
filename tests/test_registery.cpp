@@ -59,6 +59,7 @@ public:
     }
     int calls = 0;
 };
+
 std::unique_ptr<ECS::Registery> makeRegistery()
 {
     auto reg = std::make_unique<ECS::Registery>();
@@ -67,7 +68,6 @@ std::unique_ptr<ECS::Registery> makeRegistery()
 }
 
 }
-
 
 TEST(ModuleManager, RegisteringTwiceThrows)
 {
@@ -126,6 +126,8 @@ TEST(ModuleManager, EntityDestroyedClearsEveryModule)
     EXPECT_FALSE(mm.has<Velocity>(1));
     EXPECT_TRUE(mm.has<Position>(2));
 }
+
+/* ---------- Registery and systems ---------- */
 
 TEST(Registery, SystemOnlySeesEntitiesWithAllRequiredModules)
 {

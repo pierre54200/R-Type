@@ -36,9 +36,7 @@ const Vec& posOf(ECS::Registery& reg, Entity e)
     return reg.getModule<Transform>(e).position;
 }
 
-} // namespace
-
-/* ---------- MovementSystem ---------- */
+}
 
 TEST(MovementSystem, MovesByVelocityTimesDt)
 {
@@ -81,6 +79,7 @@ TEST(MovementSystem, StaticBodiesDoNotMove)
     EXPECT_FLOAT_EQ(posOf(*reg, e).x, 10.f);
     EXPECT_FLOAT_EQ(posOf(*reg, e).y, 10.f);
 }
+
 
 class CollisionTest : public ::testing::Test
 {
@@ -184,6 +183,8 @@ TEST_F(CollisionTest, TwoStaticBodiesAreLeftAlone)
     EXPECT_FLOAT_EQ(posOf(*reg, a).x, 0.f);
     EXPECT_FLOAT_EQ(posOf(*reg, b).x, 10.f);
 }
+
+/* ---------- DespawnSystem ---------- */
 
 TEST(DespawnSystem, DestroysEntitiesBeyondRangeOnly)
 {

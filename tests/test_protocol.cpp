@@ -99,6 +99,7 @@ TEST(Protocol, DISABLED_DecodeRejectsUndefinedTypes)
     }
 }
 
+// Robustness requirement of the subject: malformed packets must never crash.
 TEST(Protocol, RandomBuffersNeverCrashDecoderOrReaders)
 {
     std::mt19937 rng(42);
@@ -109,6 +110,7 @@ TEST(Protocol, RandomBuffersNeverCrashDecoderOrReaders)
         std::vector<uint8_t> buffer(static_cast<std::size_t>(length(rng)));
         for (auto& b : buffer)
             b = static_cast<uint8_t>(byte(rng));
+        // Make some of them structurally valid so the readers get exercised too
         if (buffer.size() >= HEADER_SIZE && i % 2 == 0) {
             uint16_t size = htons(static_cast<uint16_t>(buffer.size() - HEADER_SIZE));
             std::memcpy(&buffer[1], &size, sizeof(size));
@@ -126,6 +128,8 @@ TEST(Protocol, RandomBuffersNeverCrashDecoderOrReaders)
     }
     SUCCEED();
 }
+
+/* ---------- Position ---------- */
 
 TEST(Protocol, PositionRoundTrip)
 {
@@ -167,6 +171,8 @@ TEST(Protocol, ReadPositionRejectsShortPayload)
     EXPECT_FALSE(readPosition({PacketType::Position, std::string(4, '\0')}, out));
 }
 
+/* ---------- EnemySpawn ---------- */
+
 TEST(Protocol, EnemySpawnRoundTrip)
 {
     Packet packet = makeEnemySpawn({3, 500, 42, "bydo"});
@@ -185,6 +191,8 @@ TEST(Protocol, ReadEnemySpawnRejectsShortPayload)
     PlayerPosition out{};
     EXPECT_FALSE(readEnemySpawn({PacketType::EnemySpawn, "abc"}, out));
 }
+
+/* ---------- Shoot ---------- */
 
 TEST(Protocol, ShootRoundTripWithNegativeDirection)
 {

@@ -96,7 +96,6 @@ TEST(EntityManager, SignatureIsStoredAndResetOnReuse)
     em->destroyEntity(e);
     EXPECT_THROW(em->setSignature(e, sig), std::out_of_range);
 
-    // Exhaust the free list until e comes back, its signature must be clean
     Entity reused = -1;
     for (std::size_t i = 0; i < MAX_ENTITIES && reused != e; ++i)
         reused = em->createEntity();
