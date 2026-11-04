@@ -41,6 +41,20 @@ CPMAddPackage(
         "SFML_BUILD_DOC OFF"
 )
 
+CPMAddPackage(
+    NAME asio
+    GITHUB_REPOSITORY chriskohlhoff/asio
+    GIT_TAG asio-1-30-2
+    DOWNLOAD_ONLY YES
+)
+add_library(asio INTERFACE)
+target_include_directories(asio INTERFACE ${asio_SOURCE_DIR}/asio/include)
+target_compile_definitions(asio INTERFACE ASIO_STANDALONE)
+if(WIN32)
+    target_compile_definitions(asio INTERFACE _WIN32_WINNT=0x0A00)
+    target_link_libraries(asio INTERFACE ws2_32 wsock32)
+endif()
+
 # Serveur
 file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
     server/src/*.cpp
@@ -49,6 +63,7 @@ file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
 
 add_executable(r-type_server ${SERVER_SOURCES})
 target_include_directories(r-type_server PRIVATE server/src common)
+target_link_libraries(r-type_server PRIVATE asio)
 target_compile_options(r-type_server PRIVATE ${RTYPE_WARNINGS})
 
 # Client
@@ -59,7 +74,7 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
 
 add_executable(r-type_client ${CLIENT_SOURCES})
 target_include_directories(r-type_client PRIVATE client/src common)
-target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system)
+target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system asio)
 target_compile_options(r-type_client PRIVATE ${RTYPE_WARNINGS})
 
 # Les deux exécutables à la racine du projet
