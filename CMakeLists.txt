@@ -21,6 +21,14 @@ if(NOT EXISTS "${CPM_DOWNLOAD_LOCATION}")
 endif()
 include("${CPM_DOWNLOAD_LOCATION}")
 
+
+# Choose flag (Windows or linux)
+if(MSVC)
+    set(RTYPE_WARNINGS /W4)
+else()
+    set(RTYPE_WARNINGS -Wall -Wextra)
+endif()
+
 CPMAddPackage(
     NAME SFML
     GITHUB_REPOSITORY SFML/SFML
@@ -41,7 +49,7 @@ file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
 
 add_executable(r-type_server ${SERVER_SOURCES})
 target_include_directories(r-type_server PRIVATE server/src common)
-target_compile_options(r-type_server PRIVATE -Wall -Wextra)
+target_compile_options(r-type_server PRIVATE ${RTYPE_WARNINGS})
 
 # Client
 file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
@@ -52,7 +60,7 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
 add_executable(r-type_client ${CLIENT_SOURCES})
 target_include_directories(r-type_client PRIVATE client/src common)
 target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system)
-target_compile_options(r-type_client PRIVATE -Wall -Wextra)
+target_compile_options(r-type_client PRIVATE ${RTYPE_WARNINGS})
 
 # Les deux exécutables à la racine du projet
 set_target_properties(r-type_server r-type_client PROPERTIES
