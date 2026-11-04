@@ -11,26 +11,15 @@ enum class PacketType : uint8_t {
     Connect = 1,
     Message = 2,
     Disconnect = 3,
-    Action = 4,
-    Position = 5,
-    LobbyList = 6,
-    LobbyCreate = 7,
-    LobbyJoin = 8,
-    LobbyLeave = 9,
-    Info = 10,
-    EnemySpawn = 11,
-    Shoot   =   12,
+    Position = 4,
+    LobbyList = 5,
+    LobbyCreate = 6,
+    LobbyJoin = 7,
+    LobbyLeave = 8,
+    Info = 9,
+    EnemySpawn = 10,
+    Shoot   =   11,
     //  Upgrade,
-};
-
-// Action du joueur
-enum class Action : uint8_t {
-    Up = 0,
-    Down = 1,
-    Left = 2,
-    Right = 3,
-    A = 4,
-    B = 5,
 };
 
 // Donnée envoyé et recu
