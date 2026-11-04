@@ -75,3 +75,10 @@ target_compile_options(r-type_client PRIVATE ${RTYPE_WARNINGS})
 set_target_properties(r-type_server r-type_client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+# Tests unitaires (desactives par defaut : cmake -B build -DRTYPE_BUILD_TESTS=ON)
+option(RTYPE_BUILD_TESTS "Build the unit tests" OFF)
+if(RTYPE_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
