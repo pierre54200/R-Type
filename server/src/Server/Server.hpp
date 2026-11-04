@@ -1,10 +1,10 @@
 #pragma once
 
-#include <netinet/in.h>
 #include <string>
 #include <vector>
 
 #include "Protocol.hpp"
+#include "Socket.hpp"
 
 class Server {
 public:
@@ -41,7 +41,7 @@ private:
     void joinLobby(Client& client, const std::string& lobby);
     void leaveLobby(Client& client);
 
-    int _socket;
+    socket_t _socket;
     std::vector<Client> _clients;
     uint8_t _nextId = 1;
 };

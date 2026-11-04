@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.14)
 project(RType CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -21,6 +21,15 @@ if(NOT EXISTS "${CPM_DOWNLOAD_LOCATION}")
 endif()
 include("${CPM_DOWNLOAD_LOCATION}")
 
+# Flags de warnings selon le compilateur
+if(MSVC)
+    set(RTYPE_WARNINGS /W4)
+else()
+    set(RTYPE_WARNINGS -Wall -Wextra)
+endif()
+
+find_package(Threads REQUIRED)
+
 CPMAddPackage(
     NAME SFML
     GITHUB_REPOSITORY SFML/SFML
@@ -33,6 +42,13 @@ CPMAddPackage(
         "SFML_BUILD_DOC OFF"
 )
 
+# Bibliotheque reseau systeme (Winsock sous Windows, rien a ajouter sous Linux)
+add_library(rtype_net INTERFACE)
+target_link_libraries(rtype_net INTERFACE Threads::Threads)
+if(WIN32)
+    target_link_libraries(rtype_net INTERFACE ws2_32)
+endif()
+
 # Serveur
 file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
     server/src/*.cpp
@@ -41,7 +57,8 @@ file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS
 
 add_executable(r-type_server ${SERVER_SOURCES})
 target_include_directories(r-type_server PRIVATE server/src common)
-target_compile_options(r-type_server PRIVATE -Wall -Wextra)
+target_link_libraries(r-type_server PRIVATE rtype_net)
+target_compile_options(r-type_server PRIVATE ${RTYPE_WARNINGS})
 
 # Client
 file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
@@ -51,10 +68,10 @@ file(GLOB_RECURSE CLIENT_SOURCES CONFIGURE_DEPENDS
 
 add_executable(r-type_client ${CLIENT_SOURCES})
 target_include_directories(r-type_client PRIVATE client/src common)
-target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system)
-target_compile_options(r-type_client PRIVATE -Wall -Wextra)
+target_link_libraries(r-type_client PRIVATE sfml-graphics sfml-window sfml-system rtype_net)
+target_compile_options(r-type_client PRIVATE ${RTYPE_WARNINGS})
 
-# Les deux exécutables à la racine du projet
+# Les deux executables a la racine du projet
 set_target_properties(r-type_server r-type_client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
 )

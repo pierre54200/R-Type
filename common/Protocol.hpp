@@ -3,7 +3,6 @@
 #include "Socket.hpp"
 #include <cstdint>
 #include <cstring>
-#include <netinet/in.h>
 #include <string>
 #include <vector>
 
