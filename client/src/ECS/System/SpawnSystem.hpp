@@ -3,11 +3,14 @@
 #include "ECS/Modules/SceneManager.hpp"
 #include "ECS/Modules/SpawnerSettings.hpp"
 #include "ECS/Utils/SpawnEntities.hpp"
+#include "ECS/Utils/Wave.hpp"
 #include "Registery.hpp"
 #include "SystemManager.hpp"
+#include "ECS/System/NetworkSendSystem.hpp"
+#include "Protocol.hpp"
 
 #include <algorithm>
-#include <cstdlib>
+#include <cstdint>
 
 class SpawnerSystem : public ECS::System
 {
@@ -16,21 +19,31 @@ public:
 
     void update(ECS::Registery& reg, float) override
     {
-        std::srand(time(0));
+        if (!Wave::isHost || !Wave::canSpawn())
+            return;
 
         auto& sm = reg.getModule<SceneManager>(manager);
 
         for (auto& e : this->_entities)
         {
-            auto& settings = reg.getModule<SpawnerSettings>(e);
+            if (!Wave::canSpawn())
+                break;
 
+            auto& settings = reg.getModule<SpawnerSettings>(e);
             if (!settings.spawnClock.isReady())
                 continue;
 
-            Math::Vec3<float> pos  = randomVec3(settings.minPos,  settings.maxPos);
+            Math::Vec3<float> pos = randomVec3(settings.minPos, settings.maxPos);
 
             Spawn::createEnemy(reg, pos, sm.id("game"));
-            settings.spawnClock.setTargetTime(settings.time);
+            Wave::spawned++;
+            NetworkSendSystem::queue.push_back(makeEnemySpawn({
+                0,
+                static_cast<uint16_t>(std::clamp(pos.x, 0.f, 65535.f) + 0.5f),
+                static_cast<uint16_t>(std::clamp(pos.y, 0.f, 65535.f) + 0.5f),
+                ""}));
+            settings.spawnClock.setTargetTime(
+                std::max(.25f, settings.time - Wave::number * .05f));
         }
     }
 
@@ -38,12 +51,8 @@ private:
     static float randomFloat(float a, float b)
     {
         auto [lo, hi] = std::minmax(a, b);
-
-        int range = static_cast<int>(hi - lo);
-        int value = std::rand() % (range + 1);
-
-        return lo + static_cast<float>(value);
-;
+        uint32_t range = static_cast<uint32_t>(hi - lo);
+        return lo + static_cast<float>(Wave::rng() % (range + 1));
     }
 
     static Math::Vec3<float> randomVec3(const Math::Vec3<float>& min,

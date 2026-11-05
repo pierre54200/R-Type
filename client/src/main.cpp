@@ -1,16 +1,24 @@
 #include "ECS/Modules/EnemyStat.hpp"
 #include "ECS/Modules/EventQueue.hpp"
 #include "ECS/Modules/Function.hpp"
+#include "ECS/Modules/Label.hpp"
 #include "ECS/Modules/PlayerStat.hpp"
 #include "ECS/Modules/SceneManager.hpp"
 #include "ECS/Modules/SceneTag.hpp"
 #include "ECS/Modules/SpawnerSettings.hpp"
 #include "ECS/Modules/Targetable.hpp"
+#include "ECS/System/CameraSystem.hpp"
 #include "ECS/System/ClickSystem.hpp"
+#include "ECS/System/DeathSystem.hpp"
+#include "ECS/System/LobbyBrowserSystem.hpp"
 #include "ECS/System/PlayerControlSystem.hpp"
 #include "ECS/System/SceneSystem.hpp"
 #include "ECS/System/ShootSystem.hpp"
 #include "ECS/System/SpawnSystem.hpp"
+#include "ECS/System/WaveSystem.hpp"
+#include "ECS/Utils/MenuUI.hpp"
+#include "ECS/Utils/UpgradeUI.hpp"
+#include "ECS/Utils/Wave.hpp"
 #include "EntityManager.hpp"
 #include "./ECS/Modules/DespawnByRange.hpp"
 #include "./ECS/Modules/FrontEnd.hpp"
@@ -29,6 +37,8 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
+#include <random>
 
 #include "Network/NetworkClient.hpp"
 #include "./ECS/System/SceneSystem.hpp"
@@ -42,10 +52,12 @@
 #include "./ECS/System/MovementSystem.hpp"
 #include "./ECS/System/NetworkReceiveSystem.hpp"
 #include "./ECS/System/NetworkSendSystem.hpp"
-#include "./ECS/System/PlayerControlSystem.hpp"
 #include "./ECS/System/UpdateDisplaySystem.hpp"
 #include "./ECS/System/TargetSystem.hpp"
 #include "./ECS/System/EnemyLogicSystem.hpp"
+
+static constexpr float MAP_W = 4000.f;
+static constexpr float MAP_H = 4000.f;
 
 static sf::Color    colorFor(uint8_t id)
 {
@@ -57,8 +69,19 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
 {
     NetworkClient   network(ip, port, playerName);
 
-    network.send({PacketType::LobbyCreate, lobby});
-    network.send({PacketType::LobbyJoin, lobby});
+    if (!lobby.empty())
+    {
+        network.send({PacketType::LobbyCreate, lobby});
+        network.send({PacketType::LobbyJoin, lobby});
+    }
+
+    auto    sendPacket = [&network](const Packet& packet) { network.send(packet); };
+    Wave::setClient(playerName);
+    MenuUI::playerName  = playerName;
+    MenuUI::send        = sendPacket;
+    UpgradeUI::send     = sendPacket;
+    DeathSystem::send   = sendPacket;
+    WaveSystem::send    = sendPacket;
 
     ECS::Registery reg;
 
@@ -71,6 +94,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
         .registerModule<Function>()
         .registerModule<Health>()
         .registerModule<HitBox>()
+        .registerModule<Label>()
         .registerModule<NetworkSync>()
         .registerModule<PlayerStat>()
         .registerModule<RemoteEntity>()
@@ -85,6 +109,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     reg.registerSystem<SceneSystem>(reg.signatureOf<SceneTag>());
     reg.registerSystem<EventSystem>(reg.signatureOf<Window<sf::RenderWindow>, EventQueue>());
     reg.registerSystem<ClickSystem>(reg.signatureOf<Function, Transform>());
+
     auto    networkReceive = reg.registerSystem<NetworkReceiveSystem>(reg.signatureOf<RemoteEntity>());
     networkReceive->setLocalName(playerName);
     networkReceive->setReceiver([&network]() { return network.receive(); });
@@ -99,6 +124,49 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
             .addModule(remote, Targetable{.id = 0});
         return remote;
     });
+    networkReceive->setOnHost([](bool host) { Wave::isHost = host; });
+    networkReceive->setOnEnemySpawn([&reg](float x, float y)
+    {
+        if (!Wave::running || !MenuUI::inGame)
+            return;
+        SceneId game = reg.getModule<SceneManager>(SceneSystem::manager).id("game");
+        Spawn::createEnemy(reg, {x, y, 0.f}, game);
+        Wave::spawned++;
+    });
+
+    //MENU
+    networkReceive->setOnInfo([&reg](const std::string& text) { MenuUI::setStatus(reg, text); });
+    networkReceive->setOnLobbyData([&reg](const std::vector<LobbyEntry>& lobbies) { LobbyBrowser::update(reg, lobbies); });
+    networkReceive->setOnLobbyJoined([&reg](const std::string& name)
+    {
+        MenuUI::currentLobby = name;
+        MenuUI::invalidate();
+        reg.getModule<SceneManager>(SceneSystem::manager).switchTo("room");
+    });
+
+    //WAVE
+    networkReceive->setOnWaveStart([&reg](uint8_t wave)
+    {
+        if (!MenuUI::inGame)
+        {
+            MenuUI::inGame = true;
+            MenuUI::invalidate();
+            reg.getModule<SceneManager>(SceneSystem::manager).switchTo("game");
+        }
+        else
+            UpgradeUI::hide(reg);
+        Wave::start(wave);
+    });
+    networkReceive->setOnIntermission([&reg](uint8_t)
+    {
+        Wave::running = false;
+        DeathSystem::intermission(reg);
+        UpgradeUI::show(reg);
+    });
+
+    //DEATH
+    networkReceive->setOnExplosion([&reg](float damage) { DeathSystem::hurt(reg, damage); });
+
     reg.registerSystem<PlayerControlSystem>(reg.signatureOf<PlayerStat, RigidBody, Transform, SceneTag>());
     reg.registerSystem<TargetSystem>(reg.signatureOf<Targetable, Transform>());
     reg.registerSystem<EnemyLogicSystem>(reg.signatureOf<EnemyStat, Transform, RigidBody>());
@@ -106,10 +174,14 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     reg.registerSystem<MovementSystem>(reg.signatureOf<Transform, RigidBody>());
     reg.registerSystem<CollisionSystem>(reg.signatureOf<Transform, RigidBody>());
     auto    networkSend = reg.registerSystem<NetworkSendSystem>(reg.signatureOf<Transform, NetworkSync>());
-    networkSend->setSender([&network](const Packet& packet) { network.send(packet); });
+    networkSend->setSender(sendPacket);
     reg.registerSystem<HurtSystem>(reg.signatureOf<HitBox, Health, Transform>());
+    reg.registerSystem<DeathSystem>(reg.signatureOf<PlayerStat, Health, NetworkSync, FrontEnd>());
     reg.registerSystem<SpawnerSystem>(reg.signatureOf<SpawnerSettings>());
+    reg.registerSystem<WaveSystem>(reg.signatureOf<EnemyStat>());
+    reg.registerSystem<LobbyBrowserSystem>(reg.signatureOf<>());
     reg.registerSystem<DespawnSystem>(reg.signatureOf<Transform, DespawnByRange>());
+    reg.registerSystem<CameraSystem>(reg.signatureOf<>());
     reg.registerSystem<ClearDisplaySystem>(reg.signatureOf<>());
     reg.registerSystem<HealtBarDisplaySystem>(reg.signatureOf<Transform, Health, FrontEnd>());
     reg.registerSystem<DisplaySystem>(reg.signatureOf<Transform, FrontEnd>());
@@ -119,7 +191,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     Entity screen = reg.createEntity();
 
     reg.addModule(screen, Window<sf::RenderWindow>{
-            std::make_shared<sf::RenderWindow>(sf::VideoMode(600, 800), "Game"),
+            std::make_shared<sf::RenderWindow>(sf::VideoMode(1280, 720), "Game"),
             sf::Color::Black,
             false})
         .addModule(screen, EventQueue{});
@@ -136,15 +208,18 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
         .registerKey("up", sf::Keyboard::Key::W).
             registerKey("down", sf::Keyboard::Key::S).
             registerKey("right", sf::Keyboard::Key::D).
-            registerKey("left", sf::Keyboard::Key::A).
-            registerKey("shoot", sf::Keyboard::Key::Space).
-            registerKey("attack", sf::Keyboard::Key::F);
+            registerKey("left", sf::Keyboard::Key::A);
+
 
     EventSystem::screen             =   screen;
     DisplaySystem::screen           =   screen;
     ClearDisplaySystem::screen      =   screen;
     UpdateDisplaySystem::screen     =   screen;
     HealtBarDisplaySystem::screen   =   screen;
+    CameraSystem::screen            =   screen;
+    CameraSystem::mapWidth          =   MAP_W;
+    CameraSystem::mapHeight         =   MAP_H;
+    ClickSystem::screen             =   screen;
     SceneSystem::manager            =   sceneMgr;
     SpawnerSystem::manager          =   sceneMgr;
     PlayerControlSystem::controls   =   Ctrl;
@@ -168,6 +243,11 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
                 .addModule(player, NetworkSync{0, playerName})
                 .addModule(player, Targetable{.id = 0});
 
+            UpgradeUI::player = player;
+            DeathSystem::player = player;
+            auto winSize = reg.getModule<Window<sf::RenderWindow>>(DisplaySystem::screen).window->getSize();
+            UpgradeUI::create(reg, s, sf::Vector2f(winSize));
+
             auto makeWall = [&reg, s](float x, float y, float w, float h)
             {
                 Entity wall = reg.createEntity();
@@ -178,40 +258,54 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
                     .addModule(wall, FrontEnd{ true, false, 0, sf::Color::Blue });
             };
 
-            const float t = 20.f; // wall thickness
+            const float t = 40.f;
 
-            makeWall(0.f,        0.f,         600.f, t);      // top
-            makeWall(0.f,        800.f - t,   600.f, t);      // bottom
-            makeWall(0.f,        0.f,         t,     800.f);  // left
-            makeWall(600.f - t,  0.f,         t,     800.f);  // right
+            makeWall(0.f, 0.f, MAP_W, t);
+            makeWall(0.f, MAP_H - t, MAP_W, t);
+            makeWall(0.f, 0.f, t, MAP_H);
+            makeWall(MAP_W - t, 0.f, t, MAP_H);
 
 
             Entity spawner = reg.createEntity();
 
             SpawnerSettings settings;
-            settings.time    = 1.f;                      // seconds between spawns
+            settings.time    = 1.f;
             settings.spawnClock.setTargetTime(settings.time);
+            settings.minPos  = {t, t, 0.f};
+            settings.maxPos  = {MAP_W - t - 100.f, MAP_H - t - 100.f, 0.f};
 
             reg.addModule(spawner, SceneTag{s})
                 .addModule(spawner, std::move(settings));
         }
     });
 
-    SceneId menu = sm.add("menu", SceneDef{
-        .onEnter = [](ECS::Registery&   reg,    SceneId s)
+    sm.add("browser", SceneDef{
+        .onEnter = [](ECS::Registery& reg, SceneId s)
         {
-            Entity playbutton = reg.createEntity();
-
-            reg.addModule(playbutton, SceneTag{s}).addModule(playbutton, Transform{{0.f, 0.f, 0.f}, {200.f, 200.f, 0.f}})
-                .addModule(playbutton, Function{[](ECS::Registery&  reg){std::cout << "DOING" << std::endl;reg.getModule<SceneManager>(SceneSystem::manager).switchTo("game");}});
+            auto win = reg.getModule<Window<sf::RenderWindow>>(DisplaySystem::screen).window->getSize();
+            LobbyBrowser::create(reg, s, sf::Vector2f(win));
         }
     });
 
-    sm.switchTo(sm.id("game"));
+    sm.add("room", SceneDef{
+        .onEnter = [](ECS::Registery& reg, SceneId s)
+        {
+            auto win = reg.getModule<Window<sf::RenderWindow>>(DisplaySystem::screen).window->getSize();
+            RoomScreen::create(reg, s, sf::Vector2f(win));
+        }
+    });
+
+    sm.switchTo(sm.id("browser"));
 
     reg.run();
 
     return 0;
+}
+
+static std::string defaultName()
+{
+    std::random_device rd;
+    return "Player" + std::to_string(rd() % 10000);
 }
 
 int main(int ac, const char *const *av)
@@ -219,8 +313,8 @@ int main(int ac, const char *const *av)
     try {
         const std::string   ip      =   ac > 1 ? av[1] : "127.0.0.1";
         const int           port    =   ac > 2 ? std::stoi(av[2]) : 4242;
-        const std::string   name    =   ac > 3 ? av[3] : "Player";
-        const std::string   lobby   =   ac > 4 ? av[4] : "default";
+        const std::string   name    =   ac > 3 ? av[3] : defaultName();
+        const std::string   lobby   =   ac > 4 ? av[4] : "";
         return run(ip, port, name, lobby);
     } catch (const std::exception& e) {
         std::cerr << "Erreur : " << e.what() << std::endl;

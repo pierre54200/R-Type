@@ -6,7 +6,7 @@ struct  NetworkSync
 {
     uint8_t     id          =   0;
     std::string name;
-    float       sendRate    =   30.f;
+    float       sendRate    =   60.f;
 
     float       elapsed     =   0.f;
     bool        hasSent     =   false;

@@ -9,4 +9,5 @@ struct FrontEnd
     bool        isInvisible = false;
     uint32_t    layer       = 0;
     sf::Color   color       = sf::Color::White;
+    bool        screenSpace = false;
 };
