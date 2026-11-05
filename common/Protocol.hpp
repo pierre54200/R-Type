@@ -30,6 +30,7 @@ enum class PacketType : uint8_t {
     LobbyData = 19,     // serveur -> client : liste structuree des lobbies
     LobbyJoined = 20,   // serveur -> client : nom du lobby rejoint / cree
     Host = 21,
+    Ping = 22,
 };
 
 // Donnée envoyé et recu
@@ -58,7 +59,7 @@ inline bool decode(const uint8_t* buffer, std::size_t length, Packet& packet) {
     size = ntohs(size);
     if (length != HEADER_SIZE + size)
         return false;
-    if (buffer[0] < 1 || buffer[0] > static_cast<uint8_t>(PacketType::Host))
+    if (buffer[0] < 1 || buffer[0] > static_cast<uint8_t>(PacketType::Ping))
         return false;
     packet.type = static_cast<PacketType>(buffer[0]);
     packet.data.assign(reinterpret_cast<const char*>(buffer + HEADER_SIZE), size);

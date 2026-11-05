@@ -35,6 +35,7 @@ void Server::run() {
     uint8_t buffer[MAX_PACKET_SIZE];
 
     while (true) {
+        checkTimeouts();
         if (!waitReadable(_socket, 100))
             continue;
 
@@ -54,6 +55,9 @@ void Server::run() {
 
 void Server::handle(const Packet& packet, const sockaddr_in& from) {
     Client* client = find(from);
+
+    if (client)
+        client->lastSeen = std::chrono::steady_clock::now();
 
     if (packet.type == PacketType::Connect) {
         if (client || packet.data.empty())
@@ -177,6 +181,9 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
         break;
     }
 
+    case PacketType::Ping:
+        // Ping
+        break;
 
     default:
         // Info n'est envoye que par le serveur
@@ -393,4 +400,23 @@ Server::Client* Server::find(const sockaddr_in& address) {
             return &client;
     }
     return nullptr;
+}
+
+void Server::checkTimeouts() {
+    const auto now = std::chrono::steady_clock::now();
+
+    for (std::size_t i = 0; i < _clients.size();) {
+        Client& client = _clients[i];
+        if (now - client.lastSeen < CLIENT_TIMEOUT) {
+            ++i;
+            continue;
+        }
+        std::cout << client.name << " ne repond plus, deconnexion" << std::endl;
+        if (!client.lobby.empty())
+            sendToLobby(client.lobby,
+                        {PacketType::Info, client.name + " a crashe ou perdu la connexion"},
+                        &client);
+        leaveLobby(client);
+        _clients.erase(_clients.begin() + static_cast<std::ptrdiff_t>(i));
+    }
 }

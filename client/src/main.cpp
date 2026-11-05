@@ -55,6 +55,7 @@
 #include "./ECS/System/UpdateDisplaySystem.hpp"
 #include "./ECS/System/TargetSystem.hpp"
 #include "./ECS/System/EnemyLogicSystem.hpp"
+#include "./ECS/System/PingSystem.hpp"
 
 static constexpr float MAP_W = 4000.f;
 static constexpr float MAP_H = 4000.f;
@@ -109,6 +110,7 @@ static int  run(const std::string& ip, int port, const std::string& playerName, 
     reg.registerSystem<SceneSystem>(reg.signatureOf<SceneTag>());
     reg.registerSystem<EventSystem>(reg.signatureOf<Window<sf::RenderWindow>, EventQueue>());
     reg.registerSystem<ClickSystem>(reg.signatureOf<Function, Transform>());
+    reg.registerSystem<PingSystem>(reg.signatureOf<>())->setSender(sendPacket);
 
     auto    networkReceive = reg.registerSystem<NetworkReceiveSystem>(reg.signatureOf<RemoteEntity>());
     networkReceive->setLocalName(playerName);

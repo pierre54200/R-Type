@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <string>
 #include <vector>
+#include <chrono>
 
 #include "Protocol.hpp"
 
@@ -26,6 +27,7 @@ private:
         std::string lobby; // vide = pas dans un lobby
         bool ready = false;
         bool dead = false;
+        std::chrono::steady_clock::time_point lastSeen = std::chrono::steady_clock::now();
     };
 
     enum class Phase
@@ -45,14 +47,17 @@ private:
     static constexpr uint16_t MAP_HEIGHT = 4000;
     static constexpr std::size_t MAX_LOBBY_NAME = 32;
     static constexpr std::size_t MAX_LISTED_LOBBIES = 20;
+    static constexpr std::chrono::seconds CLIENT_TIMEOUT{5};
 
+    
     void handle(const Packet& packet, const sockaddr_in& from);
     void send(const Packet& packet, const sockaddr_in& to);
     void info(const Client& client, const std::string& text);
     void sendToLobby(const std::string& lobby, const Packet& packet, const Client* except = nullptr);
     Client* find(const sockaddr_in& address);
     bool nameTaken(const std::string& name) const;
-
+    void checkTimeouts();
+    
     // Lobbies
     bool lobbyExists(const std::string& lobby) const;
     void listLobbies(const Client& client);
@@ -60,7 +65,7 @@ private:
     void joinLobby(Client& client, const std::string& lobby);
     void leaveLobby(Client& client);
     void electHost(const std::string& lobby);
-
+    
     // Waves
     void resetReady(const std::string& lobby);
     void checkReady(const std::string& lobby);
