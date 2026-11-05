@@ -6,6 +6,6 @@
 
 namespace Spawn
 {
-    void    createBullet(ECS::Registery& reg, Math::Vec3<float>  pos, Math::Vec3<float>  vel, SceneId scene);
+    void    createBullet(ECS::Registery& reg, Math::Vec3<float>  pos, Math::Vec3<float>  vel, SceneId scene, float damage = 1.f);
     void    createEnemy(ECS::Registery&  reg, Math::Vec3<float>  pos, SceneId    scene);
 };

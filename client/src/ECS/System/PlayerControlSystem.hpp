@@ -4,6 +4,7 @@
 #include "Registery.hpp"
 #include "SystemManager.hpp"
 #include "../Modules/Controls.hpp"
+#include "../Modules/Health.hpp"
 #include "../Modules/Window.hpp"
 #include "../Modules/PlayerStat.hpp"
 #include "../Modules/RigidBody.hpp"
@@ -22,6 +23,12 @@ public:
             return;
         for (auto e : _entities)
         {
+            if (reg.getModule<Health>(e).point <= 0.f)
+            {
+                reg.getModule<RigidBody>(e).velocity = Math::Vec3<float>(0.f, 0.f, 0.f);
+                continue;
+            }
+
             float dx = 0.f;
             float dy = 0.f;
 

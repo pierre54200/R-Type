@@ -3,6 +3,7 @@
 #include "Socket.hpp"
 #include <cstdint>
 #include <cstring>
+#include <netinet/in.h>
 #include <string>
 #include <vector>
 
@@ -19,8 +20,16 @@ enum class PacketType : uint8_t {
     LobbyLeave = 9,
     Info = 10,
     EnemySpawn = 11,
-    Shoot   =   12,
-    //  Upgrade,
+    Shoot = 12,
+    Ready = 13,         // client -> serveur : "1" / "0"
+    WaveStart = 14,     // serveur -> clients : 1 octet, numero de la vague
+    WaveClear = 15,     // client -> serveur : ma vague est terminee
+    Intermission = 16,  // serveur -> clients : 1 octet, vague qui vient de finir
+    Death = 17,         // client -> serveur : uint16 PV max
+    PlayerDied = 18,    // serveur -> autres : id(1) x(2) y(2) degats(2)
+    LobbyData = 19,     // serveur -> client : liste structuree des lobbies
+    LobbyJoined = 20,   // serveur -> client : nom du lobby rejoint / cree
+    Host = 21,
 };
 
 // Action du joueur
@@ -59,10 +68,21 @@ inline bool decode(const uint8_t* buffer, std::size_t length, Packet& packet) {
     size = ntohs(size);
     if (length != HEADER_SIZE + size)
         return false;
-    if (buffer[0] < 1 || buffer[0] > 15)
+    if (buffer[0] < 1 || buffer[0] > static_cast<uint8_t>(PacketType::Host))
         return false;
     packet.type = static_cast<PacketType>(buffer[0]);
     packet.data.assign(reinterpret_cast<const char*>(buffer + HEADER_SIZE), size);
+    return true;
+}
+
+inline Packet makeAction(Action action) {
+    return {PacketType::Action, std::string(1, static_cast<char>(action))};
+}
+
+inline bool readAction(const Packet& packet, Action& action) {
+    if (packet.data.size() != 1 || static_cast<uint8_t>(packet.data[0]) > 5)
+        return false;
+    action = static_cast<Action>(packet.data[0]);
     return true;
 }
 
@@ -125,34 +145,136 @@ struct Shoot
     int16_t dirx;
     int16_t diry;
     std::string name;
+    uint8_t damage = 1;
 };
 
-inline Packet makeShoot(const Shoot& s) {
-    uint16_t x = htons(s.x), y = htons(s.y);
-    uint16_t dx = htons(static_cast<uint16_t>(s.dirx));
-    uint16_t dy = htons(static_cast<uint16_t>(s.diry));
-    std::string data(9, '\0');
-    data[0] = static_cast<char>(s.id);
-    std::memcpy(&data[1], &x,  2);
-    std::memcpy(&data[3], &y,  2);
-    std::memcpy(&data[5], &dx, 2);
-    std::memcpy(&data[7], &dy, 2);
-    return {PacketType::Shoot, data + s.name};
+inline Packet makeShoot(const Shoot& shoot)
+{
+    uint16_t x = htons(shoot.x);
+    uint16_t y = htons(shoot.y);
+    uint16_t dx = htons(static_cast<uint16_t>(shoot.dirx));
+    uint16_t dy = htons(static_cast<uint16_t>(shoot.diry));
+
+    std::string data(10, '\0');
+    data[0] = static_cast<char>(shoot.id);
+    std::memcpy(&data[1], &x, sizeof(x));
+    std::memcpy(&data[3], &y, sizeof(y));
+    std::memcpy(&data[5], &dx, sizeof(dx));
+    std::memcpy(&data[7], &dy, sizeof(dy));
+    data[9] = static_cast<char>(shoot.damage);
+
+    return {PacketType::Shoot, data + shoot.name};
 }
 
-inline bool readShoot(const Packet& packet, Shoot&    shoot)
+inline bool readShoot(const Packet& packet, Shoot& shoot)
 {
-    if (packet.data.size() < 9)
+    if (packet.data.size() < 10)
         return false;
+    uint16_t x, y, dx, dy;
     shoot.id = static_cast<uint8_t>(packet.data[0]);
-    std::memcpy(&shoot.x, &packet.data[1], sizeof(shoot.x));
-    std::memcpy(&shoot.y, &packet.data[3], sizeof(shoot.y));
-    std::memcpy(&shoot.dirx, &packet.data[5], sizeof(shoot.dirx));
-    std::memcpy(&shoot.diry, &packet.data[7], sizeof(shoot.diry));
-    shoot.x = ntohs(shoot.x);
-    shoot.y = ntohs(shoot.y);
-    shoot.dirx = ntohs(shoot.dirx);
-    shoot.diry = ntohs(shoot.diry);
-    shoot.name = packet.data.substr(9);
+    std::memcpy(&x, &packet.data[1], sizeof(x));
+    std::memcpy(&y, &packet.data[3], sizeof(y));
+    std::memcpy(&dx, &packet.data[5], sizeof(dx));
+    std::memcpy(&dy, &packet.data[7], sizeof(dy));
+    shoot.x = ntohs(x);
+    shoot.y = ntohs(y);
+    shoot.dirx = static_cast<int16_t>(ntohs(dx));
+    shoot.diry = static_cast<int16_t>(ntohs(dy));
+    shoot.damage = static_cast<uint8_t>(packet.data[9]);
+    shoot.name = packet.data.substr(10);
+    return true;
+}
+
+struct DeathEvent
+{
+    uint8_t id;
+    uint16_t x;
+    uint16_t y;
+    uint16_t damage;
+};
+
+inline Packet makeDeath(uint16_t maxHp)
+{
+    uint16_t v = htons(maxHp);
+    std::string data(2, '\0');
+    std::memcpy(&data[0], &v, sizeof(v));
+    return {PacketType::Death, data};
+}
+
+inline bool readDeath(const Packet& packet, uint16_t& maxHp)
+{
+    if (packet.data.size() != 2)
+        return false;
+    std::memcpy(&maxHp, packet.data.data(), sizeof(maxHp));
+    maxHp = ntohs(maxHp);
+    return true;
+}
+
+inline Packet makePlayerDied(const DeathEvent& d)
+{
+    uint16_t x = htons(d.x), y = htons(d.y), dmg = htons(d.damage);
+    std::string data(7, '\0');
+    data[0] = static_cast<char>(d.id);
+    std::memcpy(&data[1], &x, sizeof(x));
+    std::memcpy(&data[3], &y, sizeof(y));
+    std::memcpy(&data[5], &dmg, sizeof(dmg));
+    return {PacketType::PlayerDied, data};
+}
+
+inline bool readPlayerDied(const Packet& packet, DeathEvent& d)
+{
+    if (packet.data.size() != 7)
+        return false;
+    d.id = static_cast<uint8_t>(packet.data[0]);
+    std::memcpy(&d.x, &packet.data[1], sizeof(d.x));
+    std::memcpy(&d.y, &packet.data[3], sizeof(d.y));
+    std::memcpy(&d.damage, &packet.data[5], sizeof(d.damage));
+    d.x = ntohs(d.x);
+    d.y = ntohs(d.y);
+    d.damage = ntohs(d.damage);
+    return true;
+}
+
+struct LobbyEntry
+{
+    std::string name;
+    uint8_t players;
+    uint8_t state;
+};
+
+inline Packet makeLobbyData(const std::vector<LobbyEntry>& lobbies)
+{
+    std::string data(1, static_cast<char>(lobbies.size()));
+    for (const auto& l : lobbies)
+    {
+        data += static_cast<char>(l.name.size());
+        data += l.name;
+        data += static_cast<char>(l.players);
+        data += static_cast<char>(l.state);
+    }
+    return {PacketType::LobbyData, data};
+}
+
+inline bool readLobbyData(const Packet& packet, std::vector<LobbyEntry>& out)
+{
+    out.clear();
+    if (packet.data.empty())
+        return false;
+    size_t count = static_cast<uint8_t>(packet.data[0]);
+    size_t pos = 1;
+    for (size_t i = 0; i < count; i++)
+    {
+        if (pos >= packet.data.size())
+            return false;
+        size_t len = static_cast<uint8_t>(packet.data[pos++]);
+        if (pos + len + 2 > packet.data.size())
+            return false;
+        LobbyEntry e;
+        e.name    = packet.data.substr(pos, len);
+        pos      += len;
+        e.players = static_cast<uint8_t>(packet.data[pos++]);
+        e.state   = static_cast<uint8_t>(packet.data[pos++]);
+        out.push_back(std::move(e));
+    }
     return true;
 }

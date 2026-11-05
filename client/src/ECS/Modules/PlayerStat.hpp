@@ -8,4 +8,7 @@ struct PlayerStat
     Clock::Clock    attackCooldown;
     float   speed   =   200.f;
     bool    freeze  =   false;
+    float   shootDelay  =   .1f;
+    float bulletSpeed = 400.f;
+    float bulletDamage = 1.f;
 };

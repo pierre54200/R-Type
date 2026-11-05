@@ -1,3 +1,4 @@
+// The .cpp that holds Spawn::createBullet (rename to match your file)
 #include "ECS/Vec3.hpp"
 #include "SpawnEntities.hpp"
 
@@ -8,7 +9,11 @@
 #include "../Modules/DespawnByRange.hpp"
 #include "../Modules/FrontEnd.hpp"
 
-void    Spawn::createBullet(ECS::Registery& reg, Math::Vec3<float>  pos, Math::Vec3<float> vel, SceneId   scene)
+#include <SFML/Graphics/Color.hpp>
+#include <cstdint>
+#include <set>
+
+void    Spawn::createBullet(ECS::Registery& reg, Math::Vec3<float>  pos, Math::Vec3<float> vel, SceneId   scene, float damage)
 {
     Math::Vec3<float>   size{10.f, 10.f, 0.f};
     Entity  bullet = reg.createEntity();
@@ -20,7 +25,7 @@ void    Spawn::createBullet(ECS::Registery& reg, Math::Vec3<float>  pos, Math::V
             .mask = std::set<uint32_t>{1},
             .destroyOnHit = true})
         .addModule(bullet, RigidBody{vel, 9.8f, std::set<uint32_t>{0}})
-        .addModule(bullet, Health{.point = 0.f, .maxPoint = 0.f, .damage = 1.f, .team = 0})
+        .addModule(bullet, Health{.point = 0.f, .maxPoint = 0.f, .damage = damage, .team = 0})
         .addModule(bullet, DespawnByRange{{pos.x, pos.y, 0.f}})
         .addModule(bullet, FrontEnd{true, false, 0, sf::Color::Yellow})
         .addModule(bullet, SceneTag{scene});

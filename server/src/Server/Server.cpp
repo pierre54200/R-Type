@@ -1,10 +1,14 @@
 #include "Server.hpp"
 #include "Protocol.hpp"
+#include "Socket.hpp"
 
 #include <algorithm>
 #include <iostream>
 #include <map>
+#include <poll.h>
 #include <stdexcept>
+#include <sys/socket.h>
+#include <unistd.h>
 
 Server::Server(int port) {
     ensureNetworkInit();
@@ -91,7 +95,7 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
 
     case PacketType::Position: {
         PlayerPosition position;
-        if (client->lobby.empty() || !readPosition(packet, position))
+        if (client->lobby.empty() || client->dead || !readPosition(packet, position))
             return;
         client->x = std::min<uint16_t>(position.x, MAP_WIDTH);
         client->y = std::min<uint16_t>(position.y, MAP_HEIGHT);
@@ -117,19 +121,62 @@ void Server::handle(const Packet& packet, const sockaddr_in& from) {
         _clients.erase(_clients.begin() + (client - _clients.data()));
         break;
 
-    case PacketType::EnemySpawn:
+    case PacketType::EnemySpawn: {
+        auto it = _lobbies.find(client->lobby);
+        if (it == _lobbies.end() || it->second.phase != Phase::Playing ||
+            !it->second.hasHost || it->second.host != client->id)
+            return;
         sendToLobby(client->lobby, packet, client);
         break;
-
+    }
     case PacketType::Shoot: {
-        Shoot s;
-        if (client->lobby.empty() || !readShoot(packet, s))
+        Shoot shoot;
+        if (client->lobby.empty() || client->dead || !readShoot(packet, shoot))
             return;
-        s.id   = client->id;
-        s.name = client->name;
-        sendToLobby(client->lobby, makeShoot(s), client);
+        shoot.id = client->id;
+        shoot.name = client->name;
+        sendToLobby(client->lobby, makeShoot(shoot), client);
         break;
     }
+
+    case PacketType::Ready: {
+        auto it = _lobbies.find(client->lobby);
+        if (it == _lobbies.end() || it->second.phase == Phase::Playing)
+            return;
+        client->ready = (packet.data == "1");
+        checkReady(client->lobby);
+        break;
+    }
+
+    case PacketType::WaveClear: {
+        auto it = _lobbies.find(client->lobby);
+        if (it == _lobbies.end() || it->second.phase != Phase::Playing)
+            return;
+        it->second.phase = Phase::Intermission;
+        for (Client& c : _clients) {
+            if (c.lobby != client->lobby)
+                continue;
+            c.ready = false;
+            c.dead = false;
+        }
+        sendToLobby(client->lobby, {PacketType::Intermission, std::string(1, static_cast<char>(it->second.wave))});
+        break;
+    }
+
+    case PacketType::Death: {
+        uint16_t maxHp;
+        auto it = _lobbies.find(client->lobby);
+        if (it == _lobbies.end() || it->second.phase != Phase::Playing ||
+            client->dead || !readDeath(packet, maxHp))
+            return;
+        client->dead = true;
+        const uint16_t damage = std::max<uint16_t>(1, maxHp / 5);   // 20% des PV max
+        std::cout << client->name << " est mort (explosion : " << damage << ")" << std::endl;
+        sendToLobby(client->lobby,
+                    makePlayerDied({client->id, client->x, client->y, damage}), client);
+        break;
+    }
+
 
     default:
         // Info n'est envoye que par le serveur
@@ -172,24 +219,32 @@ bool Server::lobbyExists(const std::string& lobby) const {
 }
 
 void Server::listLobbies(const Client& client) {
-    std::map<std::string, int> lobbies;
+    std::map<std::string, int> counts;
     for (const Client& other : _clients) {
         if (!other.lobby.empty())
-            lobbies[other.lobby]++;
+            counts[other.lobby]++;
     }
-    if (lobbies.empty()) {
-        info(client, "Aucun lobby. Cree-en un avec /create <nom>");
-        return;
+
+    std::vector<LobbyEntry> lobbies;
+    for (const auto& [name, count] : counts) {
+        if (lobbies.size() >= MAX_LISTED_LOBBIES)
+            break;
+        uint8_t state = 0;
+        auto it = _lobbies.find(name);
+        if (it != _lobbies.end())
+            state = static_cast<uint8_t>(it->second.phase);
+        lobbies.push_back({name, static_cast<uint8_t>(std::min(count, 255)), state});
     }
-    std::string text = "Lobbies :";
-    for (const auto& [name, count] : lobbies)
-        text += "\n  - " + name + " (" + std::to_string(count) + " joueur(s))";
-    info(client, text + "\nRejoins-en un avec /join <nom>");
+    send(makeLobbyData(lobbies), client.address);
 }
 
 void Server::createLobby(Client& client, const std::string& lobby) {
     if (lobby.empty()) {
         info(client, "Usage : /create <nom>");
+        return;
+    }
+    if (lobby.size() > MAX_LOBBY_NAME) {
+        info(client, "Nom trop long (" + std::to_string(MAX_LOBBY_NAME) + " max)");
         return;
     }
     if (lobbyExists(lobby)) {
@@ -200,8 +255,12 @@ void Server::createLobby(Client& client, const std::string& lobby) {
     client.lobby = lobby;
     client.x = 100;
     client.y = 100;
+    client.ready = false;
+    client.dead = false;
+    _lobbies[lobby] = LobbyState{};
     std::cout << client.name << " a cree le lobby " << lobby << std::endl;
     info(client, "Lobby " + lobby + " cree, tu es dedans");
+    send({PacketType::LobbyJoined, lobby}, client.address);
     send(makePosition({client.id, client.x, client.y, client.name}), client.address);
 }
 
@@ -218,12 +277,20 @@ void Server::joinLobby(Client& client, const std::string& lobby) {
         info(client, "Le lobby " + lobby + " n'existe pas");
         return;
     }
+    auto state = _lobbies.find(lobby);
+    if (state != _lobbies.end() && state->second.phase == Phase::Playing) {
+        info(client, "Partie deja lancee");
+        return;
+    }
     leaveLobby(client);
     client.lobby = lobby;
     client.x = 100;
     client.y = 100;
+    client.ready = false;
+    client.dead = false;
     std::cout << client.name << " a rejoint le lobby " << lobby << std::endl;
     info(client, "Tu as rejoint " + lobby);
+    send({PacketType::LobbyJoined, lobby}, client.address);
 
     Packet myPosition = makePosition({client.id, client.x, client.y, client.name});
     for (const Client& other : _clients) {
@@ -242,12 +309,83 @@ void Server::leaveLobby(Client& client) {
         return;
     std::string lobby = client.lobby;
     client.lobby.clear();
+    client.ready = false;
+    client.dead = false;
     std::cout << client.name << " a quitte le lobby " << lobby << std::endl;
     info(client, "Tu as quitte " + lobby);
     sendToLobby(lobby, {PacketType::Info, client.name + " a quitte le lobby"});
+
+    auto it = _lobbies.find(lobby);
+    if (it == _lobbies.end())
+        return;
+    if (!lobbyExists(lobby))
+        _lobbies.erase(it);
+    else {
+        if (it->second.hasHost && it->second.host == client.id)
+            electHost(lobby);
+        if (it->second.phase != Phase::Playing)
+            checkReady(lobby);
+    }
 }
 
-/* Find the client with his address */
+void Server::electHost(const std::string& lobby) {
+    LobbyState& state = _lobbies[lobby];
+    Client* chosen = nullptr;
+    for (Client& c : _clients) {
+        if (c.lobby != lobby)
+            continue;
+        if (state.hasHost && c.id == state.host) {
+            chosen = &c;
+            break;
+        }
+        if (!chosen)
+            chosen = &c;
+    }
+    if (!chosen) {
+        state.hasHost = false;
+        return;
+    }
+    state.host = chosen->id;
+    state.hasHost = true;
+    for (const Client& c : _clients) {
+        if (c.lobby == lobby)
+            send({PacketType::Host, c.id == state.host ? "1" : "0"}, c.address);
+    }
+}
+
+void Server::resetReady(const std::string& lobby) {
+    for (Client& c : _clients) {
+        if (c.lobby == lobby)
+            c.ready = false;
+    }
+}
+
+void Server::checkReady(const std::string& lobby) {
+    int total = 0;
+    int ready = 0;
+    for (Client& c : _clients) {
+        if (c.lobby != lobby)
+            continue;
+        total++;
+        if (c.ready)
+            ready++;
+    }
+    if (total == 0)
+        return;
+    sendToLobby(lobby, {PacketType::Info,
+                        "Prets : " + std::to_string(ready) + "/" + std::to_string(total)});
+    if (ready != total)
+        return;
+
+    LobbyState& state = _lobbies[lobby];
+    state.phase = Phase::Playing;
+    state.wave++;
+    resetReady(lobby);
+    electHost(lobby);
+    std::cout << "Lobby " << lobby << " : vague " << state.wave << std::endl;
+    sendToLobby(lobby, {PacketType::WaveStart, std::string(1, static_cast<char>(state.wave))});
+}
+
 Server::Client* Server::find(const sockaddr_in& address) {
     for (Client& client : _clients) {
         if (client.address.sin_addr.s_addr == address.sin_addr.s_addr &&
