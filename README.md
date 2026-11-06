@@ -1,66 +1,98 @@
 # R-Type
 
-A multiplayer 2D shoot'em up running on Windows and Linux, developed as a third-year project at Epitech.
+A networked, cooperative 2D shoot'em up inspired by the classic R-Type, built in C++ on top of a custom Entity Component System engine. Up to four players join a lobby and fight waves of Bydos together, with a central server keeping everyone in sync.
+
+Developed as a third-year project at Epitech.
 
 ## Table of Contents
 
-- [About](#about)
-- [Technologies](#technologies)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
+- [Features](#features)
+- [Supported Platforms](#supported-platforms)
+- [Requirements](#requirements)
+- [Dependencies](#dependencies)
 - [Build](#build)
 - [Usage](#usage)
+- [How to Play](#how-to-play)
+- [Tests](#tests)
 - [Project Structure](#project-structure)
-- [Network Protocol](#network-protocol)
+- [Documentation](#documentation)
 - [Contributing](#contributing)
+- [License](#license)
 - [Authors](#authors)
 
-## About
+## Features
 
-The project is split into two parts:
+- Client and server communicating over UDP with a custom binary protocol
+- Lobby system: create, browse and join games from the client
+- Wave-based gameplay with an upgrade choice between waves
+- Each player is identified by its own color
+- Automatic detection of crashed or disconnected players
+- Custom ECS engine with decoupled systems for rendering, input, physics and networking
 
-- **Client:** an ECS (Entity Component System) engine in C++ that handles the game's physics, rendering and features.
-- **Server:** a UDP server in C++ that manages client connections and lobbies, and keeps players synchronized in-game.
+## Supported Platforms
 
-## Technologies
+| Platform | Client | Server |
+|----------|--------|--------|
+| Linux | Yes | Yes |
+| Windows | Yes | Yes |
 
-- **C++** for the client, the engine and the server
-- **CMake** as the build system
-- **SFML** for rendering on the client side
-- **UDP sockets** for networking
+Both platforms are built on every pull request by the CI (GitHub Actions).
 
-## Prerequisites
+## Requirements
 
-- A C++ compiler (GCC or Clang)
-- CMake
+- A C++20 compiler: GCC 11+, Clang 14+ or MSVC (Visual Studio 2022)
+- CMake 3.14 or newer
 - Git
+- An internet connection for the first build (dependencies are downloaded automatically)
 
-## Installation
-
-Clone the repository:
+On Linux, SFML needs a few system development packages (windowing and OpenGL). On Debian or Ubuntu:
 
 ```bash
-git clone git@github.com:EpitechPGE3-2026/G-ING-500-NCY-5-1-rtype-3.git R-Type
-cd R-Type
+sudo apt-get install libx11-dev libxrandr-dev libxcursor-dev libxi-dev \
+    libxinerama-dev libudev-dev libgl1-mesa-dev libegl1-mesa-dev libfreetype-dev
+```
+
+Nothing else needs to be installed on Windows.
+
+## Dependencies
+
+Third-party libraries are fetched and built automatically by [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) at configure time. No library source code is stored in this repository.
+
+| Library | Version | Used by | Purpose |
+|---------|---------|---------|---------|
+| [SFML](https://www.sfml-dev.org/) | 2.6.1 | Client | Window, rendering, input |
+| [GoogleTest](https://github.com/google/googletest) | 1.15.2 | Tests only | Unit tests |
+
+Networking uses the operating system sockets (BSD sockets on Linux, Winsock on Windows), wrapped in `common/Socket.hpp`.
+
+To avoid downloading dependencies again for every build directory, you can set a shared cache:
+
+```bash
+export CPM_SOURCE_CACHE=$HOME/.cache/CPM
 ```
 
 ## Build
 
-### Linux
+The same commands work on Linux and Windows:
 
 ```bash
-cmake -B build
-cmake --build build
+git clone git@github.com:EpitechPGE3-2026/G-ING-500-NCY-5-1-rtype-3.git R-Type
+cd R-Type
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --parallel
 ```
 
-### Windows
+The binaries `r-type_server` and `r-type_client` (`.exe` on Windows) are placed at the root of the repository.
 
-```powershell
-cmake -B build
-cmake --build build
+If you have `npm` installed, shortcuts are available:
+
+```bash
+npm run build     # configure and build
+npm run server    # start a server on port 4242
+npm run client    # start a client named Player1
+npm run client2   # start a second client named Player2
+npm run clean     # remove the build directory and binaries
 ```
-
-The binaries `r-type_server` and `r-type_client` are generated at the root of the repository.
 
 ## Usage
 
@@ -70,22 +102,22 @@ The binaries `r-type_server` and `r-type_client` are generated at the root of th
 ./r-type_server [port]
 ```
 
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `port` | UDP port to listen on | `4242` |
+
 ### Start a client
 
 ```bash
 ./r-type_client [hostname] [port] [username] [lobby]
 ```
 
-On Windows, use `r-type_server.exe` and `r-type_client.exe`.
-
-All arguments are optional. Default values:
-
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `hostname` | Server address | `127.0.0.1` |
+| `hostname` | Server IPv4 address | `127.0.0.1` |
 | `port` | Server port | `4242` |
-| `username` | Player name displayed in game | `player` |
-| `lobby` | Lobby to join | `default` |
+| `username` | Player name, must be unique on the server | random `PlayerXXXX` |
+| `lobby` | Lobby to create or join on startup | none (opens the lobby browser) |
 
 ### Example: local game with two players
 
@@ -94,40 +126,81 @@ All arguments are optional. Default values:
 ./r-type_server 4242
 
 # Terminal 2
-./r-type_client 127.0.0.1 4242 Pierre Salon1
+./r-type_client 127.0.0.1 4242 Pierre Room1
 
 # Terminal 3
-./r-type_client 127.0.0.1 4242 Etan Salon1
+./r-type_client 127.0.0.1 4242 Etan Room1
 ```
+
+To play over a local network, start the server on one machine and use its IP address as `hostname` on the others. Make sure the UDP port is open in the firewall.
+
+## How to Play
+
+1. Create a lobby or join one from the lobby browser.
+2. Click **Ready**. The first wave starts when every player in the lobby is ready.
+3. Move your ship and survive. Your ship fires automatically at the nearest enemy.
+4. When a wave is cleared, pick one upgrade among the cards shown. The next wave starts once everyone has chosen.
+5. When a player dies, its ship explodes and damages the other players.
 
 ### Controls
 
-| Key | Action |
-|-----|--------|
-| [Arrow keys] | [Move] |
+| Input | Action |
+|-------|--------|
+| `W` `A` `S` `D` | Move |
+| Mouse left click | Use menus, buttons and upgrade cards |
+
+## Tests
+
+Unit tests use GoogleTest and are disabled by default.
+
+```bash
+cmake -B build -DRTYPE_BUILD_TESTS=ON
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+Or simply `npm test`.
 
 ## Project Structure
 
 ```
 R-Type/
-├── client/src/       # Client source files (ECS engine, rendering, game logic)
-├── server/src/       # Server source files (networking, lobbies, synchronization)
-├── common/           # Code shared by client and server (network protocol, sockets)
-├── CMakeLists.txt    # Build configuration for client and server
-├── protocol.md       # Network protocol specification
-├── CONTRIBUTING.md   # Contribution guidelines
+├── client/src/
+│   ├── ECS/
+│   │   ├── Modules/     # Components (Transform, Health, HitBox, FrontEnd...)
+│   │   ├── System/      # Systems (Movement, Collision, Display, Network...)
+│   │   └── Utils/       # Entity factories, menus, waves, upgrades
+│   ├── Network/         # NetworkClient: UDP connection to the server
+│   └── main.cpp         # Registers systems and scenes, then runs the loop
+├── server/src/
+│   ├── Server/          # Clients, lobbies, wave state machine, timeouts
+│   └── main.cpp
+├── common/              # Shared code: ECS core, binary protocol, sockets
+├── tests/               # Unit tests (GoogleTest)
+├── assets/              # Fonts and other resources
+├── .github/workflows/   # CI: Linux and Windows builds
+├── CMakeLists.txt
+├── PROTOCOL.md          # Network protocol specification
+├── CONTRIBUTING.md      # Contribution guidelines and conventions
 └── README.md
 ```
 
-## Network Protocol
+## Documentation
 
-Client and server communicate over UDP with a custom binary protocol. The full specification (packet format, packet types, examples) is available in [PROTOCOL.md](PROTOCOL.md).
+- [PROTOCOL.md](PROTOCOL.md): full specification of the binary network protocol, detailed enough to write a new client.
+- [CONTRIBUTING.md](CONTRIBUTING.md): development setup, branching model, commit convention, coding style and review process.
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or a pull request.
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or a pull request.
+
+## License
+
+No open-source license has been chosen yet. Until then, all rights are reserved by the authors.
 
 ## Authors
 
-- **Etan Vazquez**: ECS engine
-- **Pierre Maciejewski**: Server
+| Name | Role | Contact |
+|------|------|---------|
+| Etan Vazquez | ECS engine, client | etan.vazquez@epitech.eu |
+| Pierre Maciejewski | Server, network, CI | pierre.maciejewski@epitech.eu |
